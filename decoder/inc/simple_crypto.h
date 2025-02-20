@@ -1,7 +1,7 @@
 /**
  * @file "simple_crypto.h"
  * @author Ben Janis
- * @brief Simplified Crypto API Header 
+ * @brief Simplified Crypto API Header
  * @date 2025
  *
  * This source file is part of an example system for MITRE's 2025 Embedded System CTF (eCTF).

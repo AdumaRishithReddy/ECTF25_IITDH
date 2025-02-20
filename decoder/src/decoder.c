@@ -87,6 +87,8 @@ typedef struct
     timestamp_t start_timestamp;
     timestamp_t end_timestamp;
     channel_id_t channel;
+    uint8_t sk[16]; 
+    uint8_t iv[16];
 } subscription_update_packet_t;
 
 typedef struct
@@ -245,6 +247,13 @@ int list_channels()
     write_packet(LIST_MSG, &resp, len);
     return 0;
 }
+void hex_to_byte_array(const char *hex_str, uint8_t *byte_array, size_t len)
+{
+    for (size_t i = 0; i < len; i++)
+    {
+        sscanf(hex_str + 2 * i, "%2hhx", &byte_array[i]);
+    }
+}
 
 /** @brief Updates the channel subscription for a subset of channels.
  *
@@ -260,8 +269,55 @@ int list_channels()
 int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 {
     int i;
+    uint8_t key[16] = {0xD7, 0x67, 0xCB, 0x38, 0x4C, 0xFD, 0x40, 0x57,
+                       0x11, 0xB1, 0xCA, 0x80, 0x47, 0x09, 0x6B, 0x5F};
+    // const char *hex_string = "d767cb384cfd405711b1ca8047096b5f";
+    // size_t len = 16;
+    // hex_to_byte_array(hex_string, key, len);
 
-    if (update->channel == EMERGENCY_CHANNEL)
+    // Allocate memory for decrypted buffer
+    uint8_t *decrypted = (uint8_t *)malloc(pkt_len);
+    if (!decrypted)
+    {
+        print_error("Memory allocation failed\n");
+        return -1;
+    }
+
+    // Decrypt the frame
+    if (decrypt_sym(update, pkt_len, key, decrypted) != 0)
+    {
+        print_error("Decryption failed\n");
+        free(decrypted);
+        return -1;
+    }
+
+    // Remove PKCS#7 padding
+    uint8_t pad_length = decrypted[pkt_len - 1];
+
+    // Validate padding range
+    print_debug(pad_length);
+    if (pad_length == 0 || pad_length > BLOCK_SIZE || pad_length > pkt_len)
+    {
+        print_error("Invalid padding length!\n");
+        free(decrypted);
+        return -1;
+    }
+
+    // Ensure all padding bytes are correct
+    for (size_t j = pkt_len - pad_length; j < pkt_len; j++)
+    {
+        if (decrypted[j] != pad_length)
+        {
+            print_error("Corrupted padding detected!\n");
+            free(decrypted);
+            return -1;
+        }
+    }
+
+    // Correct way to use decrypted data
+    subscription_update_packet_t *update_dec = (subscription_update_packet_t *)decrypted;
+
+    if (update_dec->channel == EMERGENCY_CHANNEL)
     {
         STATUS_LED_RED();
         print_error("Failed to update subscription - cannot subscribe to emergency channel\n");
@@ -271,16 +327,16 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     // Find the first empty slot in the subscription array
     for (i = 0; i < MAX_CHANNEL_COUNT; i++)
     {
-        if (decoder_status.subscribed_channels[i].id == update->channel || !decoder_status.subscribed_channels[i].active)
+        if (decoder_status.subscribed_channels[i].id == update_dec->channel || !decoder_status.subscribed_channels[i].active)
         {
             decoder_status.subscribed_channels[i].active = true;
-            decoder_status.subscribed_channels[i].id = update->channel;
-            decoder_status.subscribed_channels[i].start_timestamp = update->start_timestamp;
-            decoder_status.subscribed_channels[i].end_timestamp = update->end_timestamp;
+            decoder_status.subscribed_channels[i].id = update_dec->channel;
+            decoder_status.subscribed_channels[i].start_timestamp = update_dec->start_timestamp;
+            decoder_status.subscribed_channels[i].end_timestamp = update_dec->end_timestamp;
             break;
         }
     }
-
+    
     // If we do not have any room for more subscriptions
     if (i == MAX_CHANNEL_COUNT)
     {
@@ -517,56 +573,52 @@ void init()
  *  be ignored by the compiler if CRYPTO_EXAMPLE is not set in
  *  the projectk.mk file. */
 #ifdef CRYPTO_EXAMPLE
-void crypto_example(void)
-{
-    struct timeval start, end;
-    gettimeofday(&start, NULL); // Start timing before loop
+// void crypto_example(void)
+// {
+//     struct timeval start, end;
+//     gettimeofday(&start, NULL); // Start timing before loop
 
-    int i = 0;
-    while (i < 10)
-    {
-        i++;
+//     int i = 0;
+//     while (i < 10)
+//     {
+//         i++;
 
-        char *data = "Crypto Example!";
-        uint8_t ciphertext[BLOCK_SIZE];
-        uint8_t key[KEY_SIZE];
-        uint8_t hash_out[HASH_SIZE];
-        uint8_t decrypted[BLOCK_SIZE];
-        char output_buf[128] = {0};
+//         char *data = "Crypto Example!";
+//         uint8_t ciphertext[BLOCK_SIZE];
+//         uint8_t key[KEY_SIZE];
+//         uint8_t hash_out[HASH_SIZE];
+//         uint8_t decrypted[BLOCK_SIZE];
+//         char output_buf[128] = {0};
 
-        // Zero out the key
-        bzero(key, BLOCK_SIZE);
+//         // Zero out the key
+//         bzero(key, BLOCK_SIZE);
 
-        // Encrypt example data and print out
-        encrypt_sym((uint8_t *)data, BLOCK_SIZE, key, ciphertext);
-        print_debug("Encrypted data: \n");
-        print_hex_debug(ciphertext, BLOCK_SIZE);
+//         // Encrypt example data and print out
+//         encrypt_sym((uint8_t *)data, BLOCK_SIZE, key, ciphertext);
+//         print_debug("Encrypted data: \n");
+//         print_hex_debug(ciphertext, BLOCK_SIZE);
 
-        // Hash example encryption results
-        hash(ciphertext, BLOCK_SIZE, hash_out);
+//         // Hash example encryption results
+//         hash(ciphertext, BLOCK_SIZE, hash_out);
 
-        // Output hash result
-        print_debug("Hash result: \n");
-        print_hex_debug(hash_out, HASH_SIZE);
+//         // Output hash result
+//         print_debug("Hash result: \n");
+//         print_hex_debug(hash_out, HASH_SIZE);
 
-        // Decrypt the encrypted message and print out
-        decrypt_sym(ciphertext, BLOCK_SIZE, key, decrypted);
-        sprintf(output_buf, "Decrypted message: %s\n", decrypted);
-        print_debug(output_buf);
-    }
+//         // Decrypt the encrypted message and print out
+//         decrypt_sym(ciphertext, BLOCK_SIZE, key, decrypted);
+//         sprintf(output_buf, "Decrypted message: %s\n", decrypted);
+//         print_debug(output_buf);
+//     }
 
-    gettimeofday(&end, NULL);
+//     gettimeofday(&end, NULL);
 
-    // Calculating total time taken by the program.
-    double time_taken;
-
-    time_taken = (end.tv_sec - start.tv_sec) ;
-    double time_taken_us =  (end.tv_usec -
-                                start.tv_usec) ;
-    char str[100];
-    sprintf(str, "Time taken: %.2f seconds, %.2f Usecs", time_taken,time_taken_us);
-    print_debug(str);
-}
+//     // Calculating total time taken by the program.
+//     long long elapsed = (t1.tv_sec - t0.tv_sec) * 1000000LL + t1.tv_usec - t0.tv_usec;
+//     char str[100];
+//     sprintf(str, "Time taken: %.2f microseconds", elapsed);
+//     print_debug(str);
+// }
 
 #endif // CRYPTO_EXAMPLE
 
@@ -615,7 +667,7 @@ int main(void)
 #ifdef CRYPTO_EXAMPLE
             // Run the crypto example
             // TODO: Remove this from your design
-            crypto_example();
+            // crypto_example();
 #endif // CRYPTO_EXAMPLE
 
             // Print the boot flag

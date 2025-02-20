@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 import struct
 from Crypto.Cipher import AES
+import os
 
 from loguru import logger
 
@@ -35,16 +36,19 @@ def gen_subscription(
     # TODO: Update this function to provide a Decoder with whatever data it needs to
     #   subscribe to a new channel
     # Load the json of the secrets file
+    logger.debug(f"Device id: {device_id}")
     secrets = json.loads(secrets)
-    key_hex = secrets.get(str(channel))
+    key_hex = secrets.get("master_keys").get(str(device_id))
     if key_hex is None:
+        raise ValueError("No key found for device")
+    sk=secrets.get("keys").get(str(channel))
+    if sk is None:
         raise ValueError("No key found for channel")
-
     key = bytes.fromhex(key_hex)
     cipher = AES.new(key, AES.MODE_ECB)
-
+    IV=bytes.fromhex(os.urandom(16).hex()) 
     # Pack the data
-    packed_data = struct.pack("<IQQI", device_id, start, end, channel)
+    packed_data = struct.pack("<IQQI16s16s", device_id, start, end, channel,bytes.fromhex(sk),IV)
 
     # Ensure packed data is a multiple of 16 (AES block size) using PKCS#7 padding
     pad_length = 16 - (len(packed_data) % 16)
