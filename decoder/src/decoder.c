@@ -368,14 +368,6 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
     uint16_t frame_size;
     channel_id_t channel;
     timestamp_t timestamp;
-    // if (new_frame->type == 2)
-    // {
-    //     print_debug("video_frame");
-    // }
-    // else
-    // {
-    //     print_debug("Control Words");
-    // }
 
     // Frame size is the size of the packet minus the size of non-frame elements
     frame_size = pkt_len - (sizeof(new_frame->channel) + sizeof(new_frame->timestamp));
@@ -402,6 +394,8 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
         print_debug("Subscription Valid\n");
         /* The reference design doesn't need any extra work to decode, but your design likely will.
          *  Do any extra decoding here before returning the result to the host. */
+
+        /* WARNING: TODO: Hardcoded key added by ARR, remove in final design */
         uint8_t key[16] = {0x42, 0x43, 0x9F, 0xB2, 0xA5, 0x26, 0x21, 0xE6,
                            0xB3, 0x64, 0x88, 0x62, 0x7B, 0x97, 0x7A, 0x1C};
         // uint8_t key[16];
