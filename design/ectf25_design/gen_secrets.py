@@ -36,10 +36,21 @@ def gen_secrets(channels: list[int]) -> bytes:
     # Create the secrets object
     # You can change this to generate any secret material
     # The secrets file will never be shared with attackers
+    dec_ids = [
+    0xDEADBEEF, 0xCAFEBABE, 0xFEEDFACE, 0x8BADF00D,
+    0xC0FFEE00, 0xBAADF00D, 0xF00DBABE, 0xDEADFA11,
+    0xB16B00B5, 0x0BADC0DE
+]
+    # Create the secrets object
+    # You can change this to generate any secret material
+    # The secrets file will never be shared with attackers
     secrets = {
         "channels": channels,
+        "decoders": dec_ids,
+        "master_keys": {str(dec_id): os.urandom(16).hex() for dec_id in dec_ids},
         "keys": {str(channel): os.urandom(16).hex() for channel in channels},
     }
+
 
 
     # NOTE: if you choose to use JSON for your file type, you will not be able to
