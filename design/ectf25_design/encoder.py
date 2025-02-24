@@ -12,6 +12,7 @@ Copyright: Copyright (c) 2025 The MITRE Corporation
 
 import argparse
 import struct
+import hashlib
 import os
 import json
 from Crypto.Cipher import AES
@@ -60,16 +61,19 @@ class Encoder:
         # if self.idx%2==0:
         #     frame="0Hello world".encode()
         #     return struct.pack("<IQ", channel, timestamp) + frame
-
+        # IV=bytes.fromhex(os.urandom(16).hex()) 
+        IV = bytes.fromhex("bf5f9e3e41d955339a8cfc6ec821a580")
+        cw=hashlib.pbkdf2_hmac('sha256', bytes.fromhex(self.some_secrets.get(str(channel))), IV, 10000, dklen=16)
+        print(cw.hex())
         key_hex = self.some_secrets.get(str(channel))
         # print(f"Key used for channel {channel}: {key_hex}")
 
         if key_hex is None:
             raise ValueError("No key found for channel")
         
-        key = bytes.fromhex(key_hex)
-        cipher = AES.new(key, AES.MODE_ECB)
-        
+        # key = bytes.fromhex(key_hex)
+        # cipher = AES.new(key, AES.MODE_ECB)
+        cipher = AES.new(cw, AES.MODE_ECB)
         # Ensure frame is padded to a multiple of 16 bytes (AES block size)
         pad_length = 16 - (len(frame) % 16)
         frame_padded = frame + bytes([pad_length] * pad_length)

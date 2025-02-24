@@ -14,9 +14,13 @@
 #if CRYPTO_EXAMPLE
 #ifndef ECTF_CRYPTO_H
 #define ECTF_CRYPTO_H
+#define KEY_LENGTH 16   // Derived key length
+#define ITERATIONS 10000 // Number of PBKDF2 iterations
+#define SALT_LENGTH 16 
 
 #include "wolfssl/wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfssl/wolfcrypt/hash.h"
+#include <wolfssl/wolfssl/wolfcrypt/pwdbased.h>
 
 /******************************** MACRO DEFINITIONS ********************************/
 #define BLOCK_SIZE AES_BLOCK_SIZE
@@ -52,6 +56,9 @@ int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t *ciphertex
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
+
+void derive_key(uint8_t *sk, size_t sk_len, uint8_t *iv, uint8_t *derived_key);
+
 int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintext);
 
 /** @brief Hashes arbitrary-length data

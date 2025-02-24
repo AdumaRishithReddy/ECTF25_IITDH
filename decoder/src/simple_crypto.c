@@ -90,6 +90,28 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintex
     return 0;
 }
 
+void derive_key(uint8_t *sk, size_t sk_len, uint8_t *iv, uint8_t *derived_key)
+{
+    if (sk == NULL || iv == NULL || derived_key == NULL)
+    {
+        printf("Invalid input parameters\n");
+        return;
+    }
+
+    int ret = wc_PBKDF2(derived_key, sk, sk_len, iv, SALT_LENGTH, ITERATIONS, KEY_LENGTH, WC_SHA256);
+
+    if (ret != 0)
+    {
+        printf("PBKDF2 key derivation failed! Error code: %d\n", ret);
+    }
+    else
+    {
+        printf("PBKDF2 key derived successfully\n");
+    }
+}
+
+
+
 /** @brief Hashes arbitrary-length data
  *
  * @param data A pointer to a buffer of length len containing the data

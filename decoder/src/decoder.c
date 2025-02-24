@@ -87,7 +87,7 @@ typedef struct
     timestamp_t start_timestamp;
     timestamp_t end_timestamp;
     channel_id_t channel;
-    uint8_t sk[16]; 
+    uint8_t sk[16];
     uint8_t iv[16];
 } subscription_update_packet_t;
 
@@ -116,6 +116,8 @@ typedef struct
     channel_id_t id;
     timestamp_t start_timestamp;
     timestamp_t end_timestamp;
+    uint8_t sk[16];
+    uint8_t iv[16];
 } channel_status_t;
 
 typedef struct
@@ -333,10 +335,13 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
             decoder_status.subscribed_channels[i].id = update_dec->channel;
             decoder_status.subscribed_channels[i].start_timestamp = update_dec->start_timestamp;
             decoder_status.subscribed_channels[i].end_timestamp = update_dec->end_timestamp;
+            memcpy(decoder_status.subscribed_channels[i].sk, update_dec->sk, sizeof(update_dec->sk));
+            memcpy(decoder_status.subscribed_channels[i].iv, update_dec->iv, sizeof(update_dec->iv));
+
             break;
         }
     }
-    
+
     // If we do not have any room for more subscriptions
     if (i == MAX_CHANNEL_COUNT)
     {
@@ -424,6 +429,14 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
     uint16_t frame_size;
     channel_id_t channel;
     timestamp_t timestamp;
+    // if (new_frame->type == 2)
+    // {
+    //     print_debug("video_frame");
+    // }
+    // else
+    // {
+    //     print_debug("Control Words");
+    // }
 
     // Frame size is the size of the packet minus the size of non-frame elements
     frame_size = pkt_len - (sizeof(new_frame->channel) + sizeof(new_frame->timestamp));
@@ -450,10 +463,12 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
         print_debug("Subscription Valid\n");
         /* The reference design doesn't need any extra work to decode, but your design likely will.
          *  Do any extra decoding here before returning the result to the host. */
+        uint8_t key[16] = {0x48, 0x4C, 0x8C, 0xCC, 0x0B, 0x75, 0x01, 0xB2,
+                           0xE9, 0x81, 0x03, 0xE7, 0x26, 0xA7, 0xD6, 0x75};
+        // const char *hex_string = "d767cb384cfd405711b1ca8047096b5f";
+        // size_t len = 16;
+        // hex_to_byte_array(hex_string, key, len);
 
-        /* WARNING: TODO: Hardcoded key added by ARR, remove in final design */
-        uint8_t key[16] = {0x42, 0x43, 0x9F, 0xB2, 0xA5, 0x26, 0x21, 0xE6,
-                           0xB3, 0x64, 0x88, 0x62, 0x7B, 0x97, 0x7A, 0x1C};
         // uint8_t key[16];
         // if (load_key_from_json("secrets.json", channel, key) != 0)
         // {
@@ -521,6 +536,20 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
     }
 }
 
+void print_hex_deb(const char *label, uint8_t *data, size_t len)
+{
+    char buffer[KEY_LENGTH * 2 + 50]; // Buffer to store formatted output
+    char *ptr = buffer;
+    
+    ptr += sprintf(ptr, "%s: ", label);
+    for (size_t i = 0; i < len; i++)
+    {
+        ptr += sprintf(ptr, "%02X", data[i]);
+    }
+    
+    print_debug(buffer); // Print the formatted hex output
+}
+
 /** @brief Initializes peripherals for system boot.
  */
 void init()
@@ -549,6 +578,15 @@ void init()
             subscription[i].start_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
             subscription[i].end_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
             subscription[i].active = false;
+
+            uint8_t default_sk[16] = {0xD7, 0x67, 0xCB, 0x38, 0x4C, 0xFD, 0x40, 0x57,
+                                      0x11, 0xB1, 0xCA, 0x80, 0x47, 0x09, 0x6B, 0x5F};
+
+            uint8_t default_iv[16] = {0xD7, 0x67, 0xCB, 0x38, 0x4C, 0xFD, 0x40, 0x57,
+                                      0x11, 0xB1, 0xCA, 0x80, 0x47, 0x09, 0x6B, 0x5F};
+
+            memcpy(decoder_status.subscribed_channels[i].sk, default_sk, 16);
+            memcpy(decoder_status.subscribed_channels[i].iv, default_iv, 16);
         }
 
         // Write the starting channel subscriptions into flash.
@@ -622,6 +660,7 @@ void init()
 
 #endif // CRYPTO_EXAMPLE
 
+
 /**********************************************************
  *********************** MAIN LOOP ************************
  **********************************************************/
@@ -672,7 +711,12 @@ int main(void)
 
             // Print the boot flag
             // TODO: Remove this from your design
-            boot_flag();
+            // boot_flag();
+            uint8_t derived_key[KEY_LENGTH];
+            derive_key(decoder_status.subscribed_channels[1].sk, 16, decoder_status.subscribed_channels[1].iv, derived_key);
+            // sprintf("%s",derived_key);
+            print_hex_deb("Derived Key", derived_key, KEY_LENGTH);
+            // printf();
             list_channels();
 
             break;
