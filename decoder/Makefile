@@ -175,11 +175,18 @@ ifeq ($(CRYPTO_EXAMPLE), 1)
 VPATH += wolfssl/wolfcrypt/src
 endif
 
+# VPATH += cJSON
+SRCS += cJSON/cJSON.c
+
+
+
 VPATH := $(VPATH)
 
 # Where to find header files for this project
 IPATH += .
 IPATH += include
+IPATH += cJSON
+
 # eCTF Crypto Example
 ifeq ($(CRYPTO_EXAMPLE), 1)
 IPATH += wolfssl
@@ -368,6 +375,9 @@ ifneq ($(FORCE_COLOR),)
 PROJ_CFLAGS += -fdiagnostics-color=always
 endif
 
+PROJ_CFLAGS+= -g
+PROJ_CFLAGS+= -gdwarf-4
+PROJ_CFLAGS+= -O0
 # *******************************************************************************
 # Include SBT config.  We need to do this here because it needs to know
 # the current MAKECMDGOAL.

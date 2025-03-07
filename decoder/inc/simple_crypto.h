@@ -14,9 +14,9 @@
 #if CRYPTO_EXAMPLE
 #ifndef ECTF_CRYPTO_H
 #define ECTF_CRYPTO_H
-#define KEY_LENGTH 16   // Derived key length
-#define ITERATIONS 10000 // Number of PBKDF2 iterations
-#define SALT_LENGTH 16 
+#define KEY_LENGTH 16  // Derived key length
+#define ITERATIONS 1000 // Number of PBKDF2 iterations
+#define SALT_LENGTH 16
 
 #include "wolfssl/wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfssl/wolfcrypt/hash.h"

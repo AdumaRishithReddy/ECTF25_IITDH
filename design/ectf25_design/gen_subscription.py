@@ -47,7 +47,8 @@ def gen_subscription(
     key = bytes.fromhex(key_hex)
     cipher = AES.new(key, AES.MODE_ECB)
     IV=bytes.fromhex(os.urandom(16).hex()) 
-    print(IV)
+    print("IV: ",IV.hex())
+    print("SK: ",sk)
     # Pack the data
     packed_data = struct.pack("<IQQI16s16s", device_id, start, end, channel,bytes.fromhex(sk),IV)
 

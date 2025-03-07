@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <stdint.h>
 // #define _POSIX_C_SOURCE 199309L
-#include <sys/time.h>
+// #include <sys/time.h>
 #include <string.h>
 #include "mxc_device.h"
 #include "status_led.h"
@@ -23,9 +23,17 @@
 #include "mxc_delay.h"
 #include "simple_flash.h"
 #include "host_messaging.h"
-// #include <cjson/cJSON.h>
-
+#include "cJSON.h"
+// #include <unistd.h>
 #include "simple_uart.h"
+#include "mxc_sys.h"
+#include "nvic_table.h"
+#include "core_cm4.h"
+
+// #define KEY_STORAGE_ADDR 0x20001000 // Example protected SRAM address
+// #define KEY_STORAGE_SIZE 64
+#define MPU_REGION_NUMBER 0         // Select an MPU region
+#define KEY_STORAGE_ADDR 0x2001FF00 // 32 bytes for key
 
 /* Code between this #ifdef and the subsequent #endif will
  *  be ignored by the compiler if CRYPTO_EXAMPLE is not set in
@@ -131,7 +139,133 @@ typedef struct
  **********************************************************/
 
 // This is used to track decoder subscriptions
-flash_entry_t decoder_status;
+volatile flash_entry_t decoder_status;
+int idx = 0;
+timestamp_t prev_ts = 0;
+uint8_t curr_cw = NULL;
+
+// void configure_mpu_for_secure_storage()
+// {
+//     // Disable MPU before configuration
+//     ARM_MPU_Disable();
+
+//     // Configure MPU region 0 for key storage (privileged access only)
+//     MPU->RNR = 0;                           // Select Region 0
+//     MPU->RBAR = (uint32_t)KEY_STORAGE_ADDR; // Base address
+//     MPU->RASR =
+//         (1 << MPU_RASR_ENABLE_Pos) |                                            // Enable region
+//         (3 << MPU_RASR_AP_Pos) |                                                // Privileged RW, Unprivileged NO ACCESS
+//         (4 << MPU_RASR_SIZE_Pos) |                                              // 32B region (adjust if needed)
+//         (1 << MPU_RASR_S_Pos) | (1 << MPU_RASR_C_Pos) | (1 << MPU_RASR_B_Pos) | // Normal memory
+//         (0 << MPU_RASR_TEX_Pos) |                                               // TEX = 0 (normal memory)
+//         (0 << MPU_RASR_XN_Pos);                                                 // Cacheable, bufferable
+
+//     // Enable MPU with default memory map enabled
+//     ARM_MPU_Enable(MPU_CTRL_PRIVDEFENA_Msk);
+
+//     __DSB(); // Ensure memory changes take effect
+//     __ISB();
+// }
+// //////////////////////////////////////////////////////////////////
+// static volatile uint8_t secure_storage[64] __attribute__((section(".secure_key_section")));
+
+// // Macro for accessing secure storage
+// #define KEY_PTR (&secure_storage[0]) // 16 bytes for key
+// #define SK_PTR (&secure_storage[16]) // 32 bytes for session key (sk)
+// #define IV_PTR (&secure_storage[48]) // 16 bytes for IV
+
+// static inline int is_privileged_mode()
+// {
+//     return (__get_CONTROL() & 0x1) == 0; // CONTROL[0] == 0 means privileged mode
+// }
+
+// void store_secret_key()
+// {
+
+//     if (!is_privileged_mode())
+//     {
+//         // Ensure only the highest priority task can write
+//         print_debug("Unable to write");
+//         return;
+//     }
+
+//     // Store the master key securely
+//     uint8_t key[16] = {0xD7, 0x67, 0xCB, 0x38, 0x4C, 0xFD, 0x40, 0x57,
+//                        0x11, 0xB1, 0xCA, 0x80, 0x47, 0x09, 0x6B, 0x5F};
+
+//     memcpy(KEY_PTR, key, 16); // Securely store key
+// }
+
+// void secure_key_read()
+// {
+//     if (!is_privileged_mode())
+//     {
+//         print_debug("Access Denied: Unprivileged mode cannot read key");
+//         return;
+//     }
+
+//     char key_str[16 * 2 + 1]; // 2 chars per byte + 1 for null terminator
+//     for (int i = 0; i < 16; i++)
+//     {
+//         sprintf(&key_str[i * 2], "%02X", KEY_PTR[i]); // Convert byte to hex string
+//     }
+//     key_str[16 * 2] = '\0'; // Null-terminate string
+
+//     print_debug("Secure Key: ");
+//     print_debug(key_str);
+// }
+
+// void SVC_Handler(void)
+// {
+//     __asm volatile(
+//         "mrs r0, CONTROL \n" // Read CONTROL register
+//         "bic r0, r0, #1 \n"  // Clear bit 0 (set privileged mode)
+//         "msr CONTROL, r0 \n" // Write CONTROL register
+//         "isb \n"             // Ensure synchronization
+//     );
+// }
+// void switch_to_unprivileged_mode(void)
+// {
+//     print_debug("About to switch privilege...");
+//     uint32_t control_before = __get_CONTROL();
+
+//     // Try to switch (might hang after this)
+//     __asm volatile(
+//         "mrs r0, CONTROL \n"
+//         // "orr r0, r0, #1  \n" // Try changing FPCA bit instead
+//         // "msr CONTROL, r0 \n"
+//         "isb \n"
+//         "bx lr \n");
+
+//     // If it gets here, add ISB
+//     __asm("bx lr");
+
+//     // If it gets here, print confirmation
+//     uint32_t control_after = __get_CONTROL();
+//     char debug_msg[50];
+//     sprintf(debug_msg, "CONTROL before: %lu, after: %lu", control_before, control_after);
+//     print_debug(debug_msg);
+// }
+// // Function to test if MPU is enforcing the security policy
+// void test_mpu_enforcement()
+// {
+//     // Switch to unprivileged mode
+//     switch_to_unprivileged_mode(); // Ensure instruction synchronization
+//     if (is_privileged_mode())
+//     {
+//         print_debug("Privileged mode");
+//     }
+//     // Attempt to read/write (should fail)
+//     print_debug("Testing MPU enforcement...");
+//     store_secret_key();
+//     secure_key_read(); // Should print "Access Denied"
+//     // Should print "Access Denied"
+//     // __asm("svc #0");
+
+//     // __set_CONTROL(__get_CONTROL() & ~0x1); // Switch back to privileged mode
+// }
+
+////////////////////////////////////////////////////////////////////////////////
 
 /**********************************************************
  ******************** REFERENCE FLAG **********************
@@ -184,6 +318,9 @@ kkjerfI deobfuscate(aErjfkdfru veruioPjfke, aErjfkdfru veruioPjfwe)
 int is_subscribed(channel_id_t channel)
 {
     // Check if this is an emergency broadcast message
+    char ha[32];
+    sprintf(ha, "Channel: %lu", channel);
+    print_debug(ha);
     if (channel == EMERGENCY_CHANNEL)
     {
         return 1;
@@ -220,7 +357,19 @@ void boot_flag(void)
 /**********************************************************
  ********************* CORE FUNCTIONS *********************
  **********************************************************/
+void print_hex_deb(const char *label, uint8_t *data, size_t len)
+{
+    char buffer[KEY_LENGTH * 2 + 50]; // Buffer to store formatted output
+    char *ptr = buffer;
 
+    ptr += sprintf(ptr, "%s: ", label);
+    for (size_t i = 0; i < len; i++)
+    {
+        ptr += sprintf(ptr, "%02X", data[i]);
+    }
+
+    print_debug(buffer); // Print the formatted hex output
+}
 /** @brief Lists out the actively subscribed channels over UART.
  *
  *  @return 0 if successful.
@@ -240,6 +389,8 @@ int list_channels()
             resp.channel_info[resp.n_channels].start = decoder_status.subscribed_channels[i].start_timestamp;
             resp.channel_info[resp.n_channels].end = decoder_status.subscribed_channels[i].end_timestamp;
             resp.n_channels++;
+            print_hex_deb("IV", decoder_status.subscribed_channels[i].iv, KEY_LENGTH);
+            print_hex_deb("SK", decoder_status.subscribed_channels[i].sk, KEY_LENGTH);
         }
     }
 
@@ -257,6 +408,91 @@ void hex_to_byte_array(const char *hex_str, uint8_t *byte_array, size_t len)
     }
 }
 
+// int load_master_key_from_json(const char *device_id, uint8_t *key_out)
+// {
+//     // print_error("agaga");
+//     FILE *file = fopen("/secrets/secrets.json", "r");
+//     if (!file)
+//     {
+//         print_error("Error opening secrets.json");
+//         return -1;
+//     }
+
+//     fseek(file, 0, SEEK_END);
+//     long file_size = ftell(file);
+//     rewind(file);
+
+//     if (file_size <= 0)
+//     {
+//         print_error("Error: Empty or invalid file\n");
+//         fclose(file);
+//         return -1;
+//     }
+
+//     char *json_data = (char *)malloc(file_size + 1);
+//     if (!json_data)
+//     {
+//         print_error("Memory allocation failed\n");
+//         fclose(file);
+//         return -1;
+//     }
+
+//     if (fread(json_data, 1, file_size, file) != file_size)
+//     {
+//         print_error("Error reading file\n");
+//         free(json_data);
+//         fclose(file);
+//         return -1;
+//     }
+//     json_data[file_size] = '\0';
+//     fclose(file);
+
+//     cJSON *json = cJSON_Parse(json_data);
+//     if (!json)
+//     {
+//         fprintf(stderr, "JSON parse error: %s\n", cJSON_GetErrorPtr());
+//         free(json_data);
+//         return -1;
+//     }
+
+//     cJSON *master_keys_obj = cJSON_GetObjectItem(json, "master_keys");
+//     if (!cJSON_IsObject(master_keys_obj))
+//     {
+//         fprintf(stderr, "Invalid JSON format: Missing 'master_keys' object\n");
+//         cJSON_Delete(json);
+//         free(json_data);
+//         return -1;
+//     }
+
+//     cJSON *key_hex = cJSON_GetObjectItem(master_keys_obj, device_id);
+//     if (!cJSON_IsString(key_hex) || strlen(key_hex->valuestring) != 32)
+//     {
+//         fprintf(stderr, "Invalid or missing master key for device %s\n", device_id);
+//         cJSON_Delete(json);
+//         free(json_data);
+//         return -1;
+//     }
+//     char *out_print[100];
+//     sprintf(out_print, "Key from JSON : %s", key_hex->valuestring);
+//     print_debug("out_print");
+
+//     // Convert hex string to byte array
+//     for (size_t i = 0; i < 16; i++)
+//     {
+//         if (sscanf(key_hex->valuestring + (2 * i), "%2hhx", &key_out[i]) != 1)
+//         {
+//             fprintf(stderr, "Error parsing master key for device %s\n", device_id);
+//             cJSON_Delete(json);
+//             free(json_data);
+//             return -1;
+//         }
+//     }
+
+//     cJSON_Delete(json);
+//     free(json_data);
+//     return 0; // Success
+// }
+
 /** @brief Updates the channel subscription for a subset of channels.
  *
  *  @param pkt_len The length of the incoming packet
@@ -270,9 +506,21 @@ void hex_to_byte_array(const char *hex_str, uint8_t *byte_array, size_t len)
  */
 int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 {
+    // flash_simple_read(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
     int i;
+    // uint8_t key[16];
+    // load_master_key_from_json( DECODER_ID, key);
     uint8_t key[16] = {0xD7, 0x67, 0xCB, 0x38, 0x4C, 0xFD, 0x40, 0x57,
                        0x11, 0xB1, 0xCA, 0x80, 0x47, 0x09, 0x6B, 0x5F};
+    // uint8_t *key = KEY_PTR;
+    char key_str[KEY_SIZE * 2 + 1]; // 2 chars per byte + 1 for null terminator
+    for (int i = 0; i < KEY_SIZE; i++)
+    {
+        sprintf(&key_str[i * 2], "%02X", key[i]); // Convert byte to hex string
+    }
+    key_str[KEY_SIZE * 2] = '\0'; // Null-terminate string
+    print_debug("KEY is sent next");
+    print_debug(key_str);
     // const char *hex_string = "d767cb384cfd405711b1ca8047096b5f";
     // size_t len = 16;
     // hex_to_byte_array(hex_string, key, len);
@@ -297,7 +545,7 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     uint8_t pad_length = decrypted[pkt_len - 1];
 
     // Validate padding range
-    print_debug(pad_length);
+    // print_debug(pad_length);
     if (pad_length == 0 || pad_length > BLOCK_SIZE || pad_length > pkt_len)
     {
         print_error("Invalid padding length!\n");
@@ -329,14 +577,30 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     // Find the first empty slot in the subscription array
     for (i = 0; i < MAX_CHANNEL_COUNT; i++)
     {
-        if (decoder_status.subscribed_channels[i].id == update_dec->channel || !decoder_status.subscribed_channels[i].active)
+
+        if (decoder_status.subscribed_channels[i].id == update_dec->channel)
         {
+            // char ha[32];
+            // sprintf(ha, "Channel Updated: %u", decoder_status.subscribed_channels[i].id);
+            // print_debug(ha);
+            // char hat[32];
+            // sprintf(hat, "Channel Updateda: %u", update_dec->channel);
+            // print_debug(hat);
             decoder_status.subscribed_channels[i].active = true;
-            decoder_status.subscribed_channels[i].id = update_dec->channel;
+            // decoder_status.subscribed_channels[i].id = update_dec->channel;
             decoder_status.subscribed_channels[i].start_timestamp = update_dec->start_timestamp;
             decoder_status.subscribed_channels[i].end_timestamp = update_dec->end_timestamp;
+            // print_hex_deb("Update IV:", decoder_status.subscribed_channels[i].iv, 16);
+            // print_hex_deb("Update SK:", decoder_status.subscribed_channels[i].sk, 16);
+            // print_debug(i);
             memcpy(decoder_status.subscribed_channels[i].sk, update_dec->sk, sizeof(update_dec->sk));
             memcpy(decoder_status.subscribed_channels[i].iv, update_dec->iv, sizeof(update_dec->iv));
+
+            // memcpy(SK_PTR, update_dec->sk, sizeof(update_dec->sk));
+            // memcpy(IV_PTR, update_dec->iv, sizeof(update_dec->iv));
+
+            print_hex_deb("Stored IV", decoder_status.subscribed_channels[i].iv, 16);
+            print_hex_deb("Stored SK", decoder_status.subscribed_channels[i].sk, 16);
 
             break;
         }
@@ -352,6 +616,7 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
 
     flash_simple_erase_page(FLASH_STATUS_ADDR);
     flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
+
     // Success message with an empty body
     write_packet(SUBSCRIBE_MSG, NULL, 0);
     return 0;
@@ -365,66 +630,10 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
  *  @return 0 if successful.  -1 if data is from unsubscribed channel.
  */
 
-// int load_key_from_json(const char *filename, int channel, uint8_t *key_out)
-// {
-//     FILE *file = fopen(filename, "r");
-//     if (!file)
-//     {
-//         perror("Error opening secrets.json");
-//         return -1;
-//     }
-
-//     fseek(file, 0, SEEK_END);
-//     long file_size = ftell(file);
-//     rewind(file);
-
-//     char *json_data = (char *)malloc(file_size + 1);
-//     fread(json_data, 1, file_size, file);
-//     json_data[file_size] = '\0';
-//     fclose(file);
-
-//     cJSON *json = cJSON_Parse(json_data);
-//     if (!json)
-//     {
-//         fprintf(stderr, "JSON parse error!\n");
-//         free(json_data);
-//         return -1;
-//     }
-
-//     cJSON *keys_obj = cJSON_GetObjectItem(json, "keys");
-//     if (!keys_obj)
-//     {
-//         fprintf(stderr, "Invalid JSON format: Missing 'keys' object\n");
-//         cJSON_Delete(json);
-//         free(json_data);
-//         return -1;
-//     }
-
-//     char channel_str[10];
-//     sprintf(channel_str, "%d", channel); // Convert channel to string
-
-//     cJSON *key_hex = cJSON_GetObjectItem(keys_obj, channel_str);
-//     if (!key_hex || !cJSON_IsString(key_hex))
-//     {
-//         fprintf(stderr, "No key found for channel %d\n", channel);
-//         cJSON_Delete(json);
-//         free(json_data);
-//         return -1;
-//     }
-
-//     // Convert hex string to byte array
-//     for (size_t i = 0; i < 16; i++)
-//     {
-//         sscanf(key_hex->valuestring + (2 * i), "%2hhx", &key_out[i]);
-//     }
-
-//     cJSON_Delete(json);
-//     free(json_data);
-//     return 0; // Success
-// }
-
 int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
 {
+    // flash_simple_read(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
+
     char output_buf[128] = {0};
     uint16_t frame_size;
     channel_id_t channel;
@@ -437,10 +646,10 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
     // {
     //     print_debug("Control Words");
     // }
-
     // Frame size is the size of the packet minus the size of non-frame elements
     frame_size = pkt_len - (sizeof(new_frame->channel) + sizeof(new_frame->timestamp));
     channel = new_frame->channel;
+    // channel=(channel >> 8) | (channel << 8);
     timestamp = new_frame->timestamp;
 
     if (timestamp > *prev_time)
@@ -458,13 +667,47 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
 
     // Check that we are subscribed to the channel...
     print_debug("Checking subscription\n");
+
     if (is_subscribed(channel))
     {
+        // channel--;
         print_debug("Subscription Valid\n");
         /* The reference design doesn't need any extra work to decode, but your design likely will.
          *  Do any extra decoding here before returning the result to the host. */
-        uint8_t key[16] = {0x48, 0x4C, 0x8C, 0xCC, 0x0B, 0x75, 0x01, 0xB2,
-                           0xE9, 0x81, 0x03, 0xE7, 0x26, 0xA7, 0xD6, 0x75};
+        // uint8_t key[16] = {0x48, 0x4C, 0x8C, 0xCC, 0x0B, 0x75, 0x01, 0xB2,
+        //                    0xE9, 0x81, 0x03, 0xE7, 0x26, 0xA7, 0xD6, 0x75};
+        char buffer[32];
+        sprintf(buffer, "%llu", timestamp);
+        print_debug(buffer);
+
+        if (timestamp % 10000 > prev_ts || curr_cw == NULL)
+        {
+            uint8_t sk[16];
+            memcpy(sk, decoder_status.subscribed_channels[channel].sk, sizeof(decoder_status.subscribed_channels[channel].sk));
+            uint8_t iv[16];
+            memcpy(iv, decoder_status.subscribed_channels[channel].iv, sizeof(decoder_status.subscribed_channels[channel].iv));
+            uint8_t time_salt[32];
+            char ts_str[32];
+            sprintf(ts_str, "%llu", timestamp);
+            hash(ts_str, strlen(ts_str), time_salt);
+            uint8_t mixed_iv[16];
+            for (int i = 0; i < 16; i++)
+            {
+                mixed_iv[i] = iv[i] ^ time_salt[i];
+            }
+            // uint8_t key[KEY_LENGTH];
+            print_hex_deb("mixed_iv", mixed_iv, KEY_LENGTH);
+            print_debug(time_salt);
+            derive_key(sk, 16, iv, &curr_cw);
+            print_hex_deb("IV", iv, KEY_LENGTH);
+            print_hex_deb("SK", sk, KEY_LENGTH);
+            print_hex_deb("Derived Key", curr_cw, KEY_LENGTH);
+            *prev_time = timestamp % 10000;
+        }
+        idx++;
+        uint8_t key[16];
+        memcpy(key, curr_cw, sizeof(curr_cw));
+
         // const char *hex_string = "d767cb384cfd405711b1ca8047096b5f";
         // size_t len = 16;
         // hex_to_byte_array(hex_string, key, len);
@@ -477,17 +720,17 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
         // }
 
         // Allocate buffer for decrypted data
-        if (new_frame->data[0] == 0)
-        {
-            print_debug("CW?");
-            // break;
-            return 0;
-        }
-        else
-        {
-            print_debug("video");
-            print_debug(new_frame->data);
-        }
+        // if (new_frame->data[0] == 0)
+        // {
+        //     print_debug("CW?");
+        //     // break;
+        //     return 0;
+        // }
+        // else
+        // {
+        //     print_debug("video");
+        //     print_debug(new_frame->data);
+        // }
         uint8_t decrypted[frame_size];
 
         // Decrypt the frame
@@ -501,7 +744,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
         uint8_t pad_length = decrypted[frame_size - 1];
 
         // Validate padding range
-        print_debug(pad_length);
+        // print_debug(pad_length);
         if (pad_length == 0 || pad_length > BLOCK_SIZE)
         {
             print_error("Invalid padding length!\n");
@@ -536,20 +779,6 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
     }
 }
 
-void print_hex_deb(const char *label, uint8_t *data, size_t len)
-{
-    char buffer[KEY_LENGTH * 2 + 50]; // Buffer to store formatted output
-    char *ptr = buffer;
-    
-    ptr += sprintf(ptr, "%s: ", label);
-    for (size_t i = 0; i < len; i++)
-    {
-        ptr += sprintf(ptr, "%02X", data[i]);
-    }
-    
-    print_debug(buffer); // Print the formatted hex output
-}
-
 /** @brief Initializes peripherals for system boot.
  */
 void init()
@@ -575,6 +804,8 @@ void init()
 
         for (int i = 0; i < MAX_CHANNEL_COUNT; i++)
         {
+
+            subscription[i].id = i;
             subscription[i].start_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
             subscription[i].end_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
             subscription[i].active = false;
@@ -611,55 +842,55 @@ void init()
  *  be ignored by the compiler if CRYPTO_EXAMPLE is not set in
  *  the projectk.mk file. */
 #ifdef CRYPTO_EXAMPLE
-// void crypto_example(void)
-// {
-//     struct timeval start, end;
-//     gettimeofday(&start, NULL); // Start timing before loop
+void crypto_example(void)
+{
+    // struct timeval start, end;
+    // gettimeofday(&start, NULL); // Start timing before loop
 
-//     int i = 0;
-//     while (i < 10)
-//     {
-//         i++;
+    int i = 0;
+    print_debug("Crypto Example\n");
+    while (i < 1000)
+    {
+        i++;
 
-//         char *data = "Crypto Example!";
-//         uint8_t ciphertext[BLOCK_SIZE];
-//         uint8_t key[KEY_SIZE];
-//         uint8_t hash_out[HASH_SIZE];
-//         uint8_t decrypted[BLOCK_SIZE];
-//         char output_buf[128] = {0};
+        char *data = "Crypto Example!";
+        uint8_t ciphertext[BLOCK_SIZE];
+        uint8_t key[KEY_SIZE];
+        uint8_t hash_out[HASH_SIZE];
+        uint8_t decrypted[BLOCK_SIZE];
+        char output_buf[128] = {0};
 
-//         // Zero out the key
-//         bzero(key, BLOCK_SIZE);
+        // Zero out the key
+        bzero(key, BLOCK_SIZE);
 
-//         // Encrypt example data and print out
-//         encrypt_sym((uint8_t *)data, BLOCK_SIZE, key, ciphertext);
-//         print_debug("Encrypted data: \n");
-//         print_hex_debug(ciphertext, BLOCK_SIZE);
+        // Encrypt example data and print out
+        encrypt_sym((uint8_t *)data, BLOCK_SIZE, key, ciphertext);
+        // print_debug("Encrypted data: \n");
+        // print_hex_debug(ciphertext, BLOCK_SIZE);
 
-//         // Hash example encryption results
-//         hash(ciphertext, BLOCK_SIZE, hash_out);
+        // Hash example encryption results
+        // hash(ciphertext, BLOCK_SIZE, hash_out);
 
-//         // Output hash result
-//         print_debug("Hash result: \n");
-//         print_hex_debug(hash_out, HASH_SIZE);
+        // // Output hash result
+        // print_debug("Hash result: \n");
+        // print_hex_debug(hash_out, HASH_SIZE);
 
-//         // Decrypt the encrypted message and print out
-//         decrypt_sym(ciphertext, BLOCK_SIZE, key, decrypted);
-//         sprintf(output_buf, "Decrypted message: %s\n", decrypted);
-//         print_debug(output_buf);
-//     }
+        // Decrypt the encrypted message and print out
+        decrypt_sym(ciphertext, BLOCK_SIZE, key, decrypted);
+        sprintf(output_buf, "Decrypted message: %s\n", decrypted);
+        // print_debug(output_buf);
+    }
+    print_debug("Crypto Example Complete\n");
+    // gettimeofday(&end, NULL);
 
-//     gettimeofday(&end, NULL);
-
-//     // Calculating total time taken by the program.
-//     long long elapsed = (t1.tv_sec - t0.tv_sec) * 1000000LL + t1.tv_usec - t0.tv_usec;
-//     char str[100];
-//     sprintf(str, "Time taken: %.2f microseconds", elapsed);
-//     print_debug(str);
-// }
+    // // Calculating total time taken by the program.
+    // long long elapsed = (t1.tv_sec - t0.tv_sec) * 1000000LL + t1.tv_usec - t0.tv_usec;
+    // char str[100];
+    // sprintf(str, "Time taken: %.2f microseconds", elapsed);
+    // print_debug(str);
+}
 
 #endif // CRYPTO_EXAMPLE
-
 
 /**********************************************************
  *********************** MAIN LOOP ************************
@@ -667,13 +898,16 @@ void init()
 
 int main(void)
 {
+    // MXC_SYS_Clock_Select(MXC_SYS_CLOCK_IPO); // Select internal clock
+    // MXC_SYS_ClockEnable(MXC_SYS_RESET_GPIO2);
+    // configure_mpu_for_secure_storage();
+    // store_secret_key();
     char output_buf[128] = {0};
     uint8_t uart_buf[100];
     msg_type_t cmd;
     int result;
     uint16_t pkt_len;
     timestamp_t prev_time = 0;
-
     // initialize the device
     init();
 
@@ -702,6 +936,23 @@ int main(void)
         // Handle list command
         case LIST_MSG:
             STATUS_LED_CYAN();
+            uint8_t output_key[KEY_SIZE];
+            // test_mpu_enforcement();
+
+            // print_debug("Reading key using SVC...");
+            // svc_read_key(output_key); // Read using SVC
+
+            // char key_str[KEY_SIZE * 2 + 1];
+            // for (int i = 0; i < KEY_SIZE; i++)
+            // {
+            //     sprintf(&key_str[i * 2], "%02X", output_key[i]);
+            // }
+            // key_str[KEY_SIZE * 2] = '\0';
+
+            // print_debug(key_str);
+
+            // // Attempting unauthorized access
+            // non_privileged_access();
 
 #ifdef CRYPTO_EXAMPLE
             // Run the crypto example
@@ -712,10 +963,21 @@ int main(void)
             // Print the boot flag
             // TODO: Remove this from your design
             // boot_flag();
-            uint8_t derived_key[KEY_LENGTH];
-            derive_key(decoder_status.subscribed_channels[1].sk, 16, decoder_status.subscribed_channels[1].iv, derived_key);
-            // sprintf("%s",derived_key);
-            print_hex_deb("Derived Key", derived_key, KEY_LENGTH);
+            // int j = 0;
+            // print_debug("Derivation started");
+            // while (j < 10)
+            // {
+            //     uint8_t derived_key[KEY_LENGTH];
+            //     derive_key(decoder_status.subscribed_channels[1].sk, 16, decoder_status.subscribed_channels[1].iv, derived_key);
+
+            //     // print_hex_deb("Derived Key", derived_key, KEY_LENGTH);
+            //     j++;
+            // }
+            // print_debug("Derivation done");
+            // uint8_t key[16];
+            // char decoder_id_str[16];
+            // sprintf(decoder_id_str, "%u", DECODER_ID);
+            // load_master_key_from_json(decoder_id_str, key);
             // printf();
             list_channels();
 
@@ -724,17 +986,16 @@ int main(void)
         // Handle decode command
         case DECODE_MSG:
             STATUS_LED_PURPLE();
-            sprintf(output_buf, "Before decoder: %llu\n", prev_time);
-            print_debug(output_buf);
             decode(pkt_len, (frame_packet_t *)uart_buf, &prev_time);
-            sprintf(output_buf, "After decode:  %llu\n", prev_time);
-            print_debug(output_buf);
             break;
 
         // Handle subscribe command
         case SUBSCRIBE_MSG:
             STATUS_LED_YELLOW();
             update_subscription(pkt_len, (subscription_update_packet_t *)uart_buf);
+            // flash_simple_read(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
+            // print_hex_deb("MAIN  IV", decoder_status.subscribed_channels[1].iv, 16);
+            // print_hex_deb("MAIN  SK", decoder_status.subscribed_channels[1].sk, 16);
             break;
 
         // Handle bad command

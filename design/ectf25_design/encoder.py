@@ -19,6 +19,8 @@ from Crypto.Cipher import AES
 
 class Encoder:
     idx=0
+    cw=None
+    prev_ts=9999
     def __init__(self, secrets: bytes):
         """
         You **may not** change the arguments or returns of this function!
@@ -62,18 +64,26 @@ class Encoder:
         #     frame="0Hello world".encode()
         #     return struct.pack("<IQ", channel, timestamp) + frame
         # IV=bytes.fromhex(os.urandom(16).hex()) 
-        IV = bytes.fromhex("bf5f9e3e41d955339a8cfc6ec821a580")
-        cw=hashlib.pbkdf2_hmac('sha256', bytes.fromhex(self.some_secrets.get(str(channel))), IV, 10000, dklen=16)
-        print(cw.hex())
-        key_hex = self.some_secrets.get(str(channel))
-        # print(f"Key used for channel {channel}: {key_hex}")
+        IV = bytes.fromhex("ec32decad5e216f0d43618fce13e5040")
+        print("timestamp",timestamp)
+        if self.cw is None or timestamp%10000>self.prev_ts:
+            time_salt = hashlib.sha256(str(timestamp).encode()).digest()[:16]
+            mixed_iv = bytes(a ^ b for a, b in zip(IV, time_salt))
+            sk=bytes.fromhex(self.some_secrets.get(str(channel)))
+            self.cw=hashlib.pbkdf2_hmac('sha256',sk, IV, 1000, dklen=16)
+            self.prev_ts=timestamp%10000
+            print(self.cw.hex())
+        self.idx+=1
+        # print(self.cw.hex(),self.idx)
+        # key_hex = self.some_secrets.get(str(channel))
+        # # print(f"Key used for channel {channel}: {key_hex}")
 
-        if key_hex is None:
-            raise ValueError("No key found for channel")
+        # if key_hex is None:
+        #     raise ValueError("No key found for channel")
         
         # key = bytes.fromhex(key_hex)
         # cipher = AES.new(key, AES.MODE_ECB)
-        cipher = AES.new(cw, AES.MODE_ECB)
+        cipher = AES.new(self.cw, AES.MODE_ECB)
         # Ensure frame is padded to a multiple of 16 bytes (AES block size)
         pad_length = 16 - (len(frame) % 16)
         frame_padded = frame + bytes([pad_length] * pad_length)
