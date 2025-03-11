@@ -14,6 +14,11 @@
 /*********************** INCLUDES *************************/
 #include <stdio.h>
 #include <stdint.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/time.h>
+// #include <mxc_delay.h>
 // #define _POSIX_C_SOURCE 199309L
 // #include <sys/time.h>
 #include <string.h>
@@ -29,6 +34,11 @@
 #include "mxc_sys.h"
 #include "nvic_table.h"
 #include "core_cm4.h"
+
+#include "mxc.h"
+#include "board.h"
+
+#define TIMER MXC_TMR0
 
 // #define KEY_STORAGE_ADDR 0x20001000 // Example protected SRAM address
 // #define KEY_STORAGE_SIZE 64
@@ -117,7 +127,8 @@ typedef struct
 /**********************************************************
  ******************** TYPE DEFINITIONS ********************
  **********************************************************/
-
+volatile int frame_count = 0;
+volatile int timer_expired = 0;
 typedef struct
 {
     bool active;
@@ -142,7 +153,7 @@ typedef struct
 volatile flash_entry_t decoder_status;
 int idx = 0;
 timestamp_t prev_ts = 0;
-uint8_t curr_cw = NULL;
+uint8_t curr_cw[KEY_LENGTH] = {0};
 
 // void configure_mpu_for_secure_storage()
 // {
@@ -318,9 +329,9 @@ kkjerfI deobfuscate(aErjfkdfru veruioPjfke, aErjfkdfru veruioPjfwe)
 int is_subscribed(channel_id_t channel)
 {
     // Check if this is an emergency broadcast message
-    char ha[32];
-    sprintf(ha, "Channel: %lu", channel);
-    print_debug(ha);
+    // char ha[32];
+    // sprintf(ha, "Channel: %lu", channel);
+    // print_debug(ha);
     if (channel == EMERGENCY_CHANNEL)
     {
         return 1;
@@ -335,7 +346,11 @@ int is_subscribed(channel_id_t channel)
     }
     return 0;
 }
-
+// void handle_interrupt(int sig)
+// {
+//     print_debug("[INFO] Interrupt received! Stopping...");
+//     stop = 1;
+// }
 /** @brief Prints the boot reference design flag
  *
  *  TODO: Remove this in your final design
@@ -389,8 +404,8 @@ int list_channels()
             resp.channel_info[resp.n_channels].start = decoder_status.subscribed_channels[i].start_timestamp;
             resp.channel_info[resp.n_channels].end = decoder_status.subscribed_channels[i].end_timestamp;
             resp.n_channels++;
-            print_hex_deb("IV", decoder_status.subscribed_channels[i].iv, KEY_LENGTH);
-            print_hex_deb("SK", decoder_status.subscribed_channels[i].sk, KEY_LENGTH);
+            // print_hex_deb("IV", decoder_status.subscribed_channels[i].iv, KEY_LENGTH);
+            // print_hex_deb("SK", decoder_status.subscribed_channels[i].sk, KEY_LENGTH);
         }
     }
 
@@ -408,90 +423,6 @@ void hex_to_byte_array(const char *hex_str, uint8_t *byte_array, size_t len)
     }
 }
 
-// int load_master_key_from_json(const char *device_id, uint8_t *key_out)
-// {
-//     // print_error("agaga");
-//     FILE *file = fopen("/secrets/secrets.json", "r");
-//     if (!file)
-//     {
-//         print_error("Error opening secrets.json");
-//         return -1;
-//     }
-
-//     fseek(file, 0, SEEK_END);
-//     long file_size = ftell(file);
-//     rewind(file);
-
-//     if (file_size <= 0)
-//     {
-//         print_error("Error: Empty or invalid file\n");
-//         fclose(file);
-//         return -1;
-//     }
-
-//     char *json_data = (char *)malloc(file_size + 1);
-//     if (!json_data)
-//     {
-//         print_error("Memory allocation failed\n");
-//         fclose(file);
-//         return -1;
-//     }
-
-//     if (fread(json_data, 1, file_size, file) != file_size)
-//     {
-//         print_error("Error reading file\n");
-//         free(json_data);
-//         fclose(file);
-//         return -1;
-//     }
-//     json_data[file_size] = '\0';
-//     fclose(file);
-
-//     cJSON *json = cJSON_Parse(json_data);
-//     if (!json)
-//     {
-//         fprintf(stderr, "JSON parse error: %s\n", cJSON_GetErrorPtr());
-//         free(json_data);
-//         return -1;
-//     }
-
-//     cJSON *master_keys_obj = cJSON_GetObjectItem(json, "master_keys");
-//     if (!cJSON_IsObject(master_keys_obj))
-//     {
-//         fprintf(stderr, "Invalid JSON format: Missing 'master_keys' object\n");
-//         cJSON_Delete(json);
-//         free(json_data);
-//         return -1;
-//     }
-
-//     cJSON *key_hex = cJSON_GetObjectItem(master_keys_obj, device_id);
-//     if (!cJSON_IsString(key_hex) || strlen(key_hex->valuestring) != 32)
-//     {
-//         fprintf(stderr, "Invalid or missing master key for device %s\n", device_id);
-//         cJSON_Delete(json);
-//         free(json_data);
-//         return -1;
-//     }
-//     char *out_print[100];
-//     sprintf(out_print, "Key from JSON : %s", key_hex->valuestring);
-//     print_debug("out_print");
-
-//     // Convert hex string to byte array
-//     for (size_t i = 0; i < 16; i++)
-//     {
-//         if (sscanf(key_hex->valuestring + (2 * i), "%2hhx", &key_out[i]) != 1)
-//         {
-//             fprintf(stderr, "Error parsing master key for device %s\n", device_id);
-//             cJSON_Delete(json);
-//             free(json_data);
-//             return -1;
-//         }
-//     }
-
-//     cJSON_Delete(json);
-//     free(json_data);
-//     return 0; // Success
-// }
 
 /** @brief Updates the channel subscription for a subset of channels.
  *
@@ -519,11 +450,8 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
         sprintf(&key_str[i * 2], "%02X", key[i]); // Convert byte to hex string
     }
     key_str[KEY_SIZE * 2] = '\0'; // Null-terminate string
-    print_debug("KEY is sent next");
-    print_debug(key_str);
-    // const char *hex_string = "d767cb384cfd405711b1ca8047096b5f";
-    // size_t len = 16;
-    // hex_to_byte_array(hex_string, key, len);
+    
+    
 
     // Allocate memory for decrypted buffer
     uint8_t *decrypted = (uint8_t *)malloc(pkt_len);
@@ -577,7 +505,6 @@ int update_subscription(pkt_len_t pkt_len, subscription_update_packet_t *update)
     // Find the first empty slot in the subscription array
     for (i = 0; i < MAX_CHANNEL_COUNT; i++)
     {
-
         if (decoder_status.subscribed_channels[i].id == update_dec->channel)
         {
             // char ha[32];
@@ -676,11 +603,9 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
          *  Do any extra decoding here before returning the result to the host. */
         // uint8_t key[16] = {0x48, 0x4C, 0x8C, 0xCC, 0x0B, 0x75, 0x01, 0xB2,
         //                    0xE9, 0x81, 0x03, 0xE7, 0x26, 0xA7, 0xD6, 0x75};
-        char buffer[32];
-        sprintf(buffer, "%llu", timestamp);
-        print_debug(buffer);
+        
 
-        if (timestamp % 10000 > prev_ts || curr_cw == NULL)
+        if (timestamp / 10000 > prev_ts || curr_cw == NULL)
         {
             uint8_t sk[16];
             memcpy(sk, decoder_status.subscribed_channels[channel].sk, sizeof(decoder_status.subscribed_channels[channel].sk));
@@ -688,49 +613,31 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame, timestamp_t *prev_time)
             memcpy(iv, decoder_status.subscribed_channels[channel].iv, sizeof(decoder_status.subscribed_channels[channel].iv));
             uint8_t time_salt[32];
             char ts_str[32];
-            sprintf(ts_str, "%llu", timestamp);
+            sprintf(ts_str, "%llu", (unsigned long long)(timestamp / 10000));
             hash(ts_str, strlen(ts_str), time_salt);
             uint8_t mixed_iv[16];
             for (int i = 0; i < 16; i++)
             {
                 mixed_iv[i] = iv[i] ^ time_salt[i];
             }
-            // uint8_t key[KEY_LENGTH];
-            print_hex_deb("mixed_iv", mixed_iv, KEY_LENGTH);
-            print_debug(time_salt);
-            derive_key(sk, 16, iv, &curr_cw);
-            print_hex_deb("IV", iv, KEY_LENGTH);
-            print_hex_deb("SK", sk, KEY_LENGTH);
-            print_hex_deb("Derived Key", curr_cw, KEY_LENGTH);
-            *prev_time = timestamp % 10000;
+        
+            uint8_t derived_key[16];
+            derive_key(sk, 16, mixed_iv, derived_key);
+            memcpy(curr_cw, derived_key, 16);
+            // char out_print[100];
+            // sprintf(out_print, "saltlen: %u, keylen: %u, iterations: %u", SALT_LENGTH, KEY_LENGTH, ITERATIONS);
+            // print_debug(out_print);
+            // wc_PBKDF2(&curr_cw, sk, 16, iv, SALT_LENGTH, ITERATIONS, KEY_LENGTH, WC_SHA256);
+            // print_hex_deb("IV", iv, KEY_LENGTH);
+            // print_hex_deb("SK", sk, KEY_LENGTH);
+            // print_hex_deb("Derived Key", derived_key, KEY_LENGTH);
+            print_hex_deb("Global Derived Key", curr_cw, KEY_LENGTH);
+            *prev_time = timestamp / 10000;
         }
         idx++;
         uint8_t key[16];
         memcpy(key, curr_cw, sizeof(curr_cw));
 
-        // const char *hex_string = "d767cb384cfd405711b1ca8047096b5f";
-        // size_t len = 16;
-        // hex_to_byte_array(hex_string, key, len);
-
-        // uint8_t key[16];
-        // if (load_key_from_json("secrets.json", channel, key) != 0)
-        // {
-        //     print_error("Failed to load key from JSON\n");
-        //     return -1;
-        // }
-
-        // Allocate buffer for decrypted data
-        // if (new_frame->data[0] == 0)
-        // {
-        //     print_debug("CW?");
-        //     // break;
-        //     return 0;
-        // }
-        // else
-        // {
-        //     print_debug("video");
-        //     print_debug(new_frame->data);
-        // }
         uint8_t decrypted[frame_size];
 
         // Decrypt the frame
@@ -890,7 +797,25 @@ void crypto_example(void)
     // print_debug(str);
 }
 
+#define TIMER_PERIOD_SECONDS 10
+
 #endif // CRYPTO_EXAMPLE
+// void init_timer()
+// {
+//     mxc_tmr_cfg_t tmr_cfg;
+//     tmr_cfg.pres = TMR_PRES_128; // Set prescaler (adjust based on clock speed)
+//     tmr_cfg.mode = TMR_MODE_CONTINUOUS;
+//     tmr_cfg.cmp_cnt = 0xFFFFFFFF; // Max count (free-running mode)
+//     tmr_cfg.pol = 0;
+
+//     MXC_TMR_Init(TIMER, &tmr_cfg, false);
+//     MXC_TMR_ClearFlags(TIMER);
+// }
+// void WUT_IRQHandler(void)
+// {
+//     MXC_WUT_IntClear();
+//     timer_expired = 1; // Set flag when timer expires
+// }
 
 /**********************************************************
  *********************** MAIN LOOP ************************
@@ -908,11 +833,15 @@ int main(void)
     int result;
     uint16_t pkt_len;
     timestamp_t prev_time = 0;
+    // int frame_count = 0;
+    uint32_t start_time, end_time;
     // initialize the device
     init();
+    // mxc_wut_cfg_t cfg;
+    // uint32_t ticks;
 
     print_debug("Decoder Booted!\n");
-
+    // signal(SIGINT, handle_interrupt)
     // process commands forever
     while (1)
     {
@@ -936,7 +865,7 @@ int main(void)
         // Handle list command
         case LIST_MSG:
             STATUS_LED_CYAN();
-            uint8_t output_key[KEY_SIZE];
+            // uint8_t output_key[KEY_SIZE];
             // test_mpu_enforcement();
 
             // print_debug("Reading key using SVC...");
@@ -985,7 +914,35 @@ int main(void)
 
         // Handle decode command
         case DECODE_MSG:
+            // if (frame_count == 0)
+            // {
+            //     MXC_WUT_GetTicks(TIMER_PERIOD_SECONDS * 1000, MXC_WUT_UNIT_MILLISEC, &ticks);
+
+            //     // config structure for one shot timer to trigger in a number of ticks
+            //     cfg.mode = MXC_WUT_MODE_ONESHOT;
+            //     cfg.cmp_cnt = ticks;
+
+            //     // Init WUT
+            //     MXC_WUT_Init(MXC_WUT_PRES_1);
+
+            //     // Config WUT
+            //     MXC_WUT_Config(&cfg);
+            //     MXC_LP_EnableWUTAlarmWakeup();
+            //     NVIC_EnableIRQ(WUT_IRQn);
+            //     MXC_WUT_Enable();
+            // }
             STATUS_LED_PURPLE();
+            // frame_count++;
+            // char frame_count_str[10];
+            // sprintf(frame_count_str, "Frame count: %d", frame_count);
+            // print_debug(frame_count_str);
+            // if (timer_expired)
+            // {
+            //     print_debug("Timer expired!\n");
+            //     char str[100];
+            //     sprintf(str, "Total frames received in %d seconds: %d,Frame rate: %.2f FPS", TIMER_PERIOD_SECONDS, frame_count, frame_count / (float)TIMER_PERIOD_SECONDS);
+            //     print_debug(str);
+            // }
             decode(pkt_len, (frame_packet_t *)uart_buf, &prev_time);
             break;
 

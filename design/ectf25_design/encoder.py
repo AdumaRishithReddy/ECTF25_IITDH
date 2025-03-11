@@ -65,14 +65,16 @@ class Encoder:
         #     return struct.pack("<IQ", channel, timestamp) + frame
         # IV=bytes.fromhex(os.urandom(16).hex()) 
         IV = bytes.fromhex("ec32decad5e216f0d43618fce13e5040")
-        print("timestamp",timestamp)
-        if self.cw is None or timestamp%10000>self.prev_ts:
-            time_salt = hashlib.sha256(str(timestamp).encode()).digest()[:16]
+        # print("timestamp",timestamp)
+        if self.cw is None or timestamp//10000>self.prev_ts:
+            time_salt = hashlib.sha256(str(timestamp//10000).encode()).digest()[:16]
             mixed_iv = bytes(a ^ b for a, b in zip(IV, time_salt))
             sk=bytes.fromhex(self.some_secrets.get(str(channel)))
-            self.cw=hashlib.pbkdf2_hmac('sha256',sk, IV, 1000, dklen=16)
-            self.prev_ts=timestamp%10000
-            print(self.cw.hex())
+            self.cw=hashlib.pbkdf2_hmac('sha256',sk, mixed_iv, 1000, dklen=16)
+            self.prev_ts=timestamp//10000
+            # print(sk.hex(),"--",mixed_iv.hex(),"--",self.cw.hex(),"--",timestamp//10000)
+            # print(time_salt.hex())
+            # print("-------------------")
         self.idx+=1
         # print(self.cw.hex(),self.idx)
         # key_hex = self.some_secrets.get(str(channel))
