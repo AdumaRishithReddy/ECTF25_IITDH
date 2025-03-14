@@ -1,7 +1,9 @@
 # Quicknotes
 ## Debugging
 
-Before getting started with debugging, the board needs to have a debugger server running that lets you connect and act as a client. This service is provided by OpenOCD.
+- Before getting started with debugging, the board needs to have a debugger server running.
+- The host connects and acts as a client. 
+- This service is provided by OpenOCD.
 
 To create and run the server on the board:
 ```bash
@@ -10,8 +12,9 @@ To create and run the server on the board:
 
 The server is now running and you should see the green LED blinking rapidly.
 
-There are multiple ways to connect to a debugger server on the board.
-To make everything portable, eCTF organizers have provided you with a way to connect using a Docker container. However, if you have `gdb-multiarch` installed already, you can connect to the server directly.
+- There are multiple ways to connect to a debugger server on the board.
+- To make everything portable, eCTF organizers have provided you with a way to connect using a Docker container. 
+- However, if you have `gdb-multiarch` installed already, you can connect to the server directly.
 
 ### GDB on Docker
 ```
@@ -30,12 +33,12 @@ To make everything portable, eCTF organizers have provided you with a way to con
 
 *Command*
 ```
-docker run --rm -it \
- -p 3333:3333/tcp \
- -v {PATH_TO_DIRECTORY_CONTAINING_TARGET}:/out \
- --workdir=/root \
- --entrypoint /bin/bash \
- {DECODE_IMAGE_NAME} \
+docker run --rm -it                                      \
+ -p 3333:3333/tcp                                        \
+ -v {PATH_TO_DIRECTORY_CONTAINING_TARGET}:/out           \
+ --workdir=/root                                         \
+ --entrypoint /bin/bash                                  \
+ {DECODE_IMAGE_NAME}                                     \
  -c " cp -r /out/* /root/ && gdb-multiarch {TARGET}.elf "
 ```
 
@@ -108,7 +111,8 @@ You should now be inside the OpenOCD shell where you can inspect the contents of
 # Common Issues
 ## Bad Flash / Stuck at requesting update
 
-This occurs when a flash overwrites the ECTF bootloader. It might also happen due to the DAPLink interface (provides serial communications and debugging) is no longer working.
+- This occurs when a flash overwrites the ECTF bootloader. 
+- It might also happen due to the DAPLink interface (provides serial communications and debugging) is no longer working.
 
 *DAPLink Interface Fix*
 
