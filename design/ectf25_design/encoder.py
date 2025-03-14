@@ -12,15 +12,37 @@ Copyright: Copyright (c) 2025 The MITRE Corporation
 
 import argparse
 import struct
-import hashlib
 import os
 import json
+
 from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+import hashlib
+from Crypto.PublicKey import RSA
+from Crypto.Signature import pkcs1_15
+from Crypto.Hash import SHA256
 
 class Encoder:
-    idx=0
-    cw=None
-    prev_ts=9999
+
+    frame_count = 0
+    cw = None
+    prev_ts = 9999
+    IV = bytes.fromhex("ec32decad5e216f0d43618fce13e5040")
+
+    private_key_pem = """
+    -----BEGIN PRIVATE KEY-----
+    YOUR_PRIVATE_KEY_HERE
+    -----END PRIVATE KEY-----
+    """
+
+    signing_key = serialization.load_pem_private_key(
+        private_key_pem.encode(),  # Convert string to bytes
+        password=None,
+        backend=default_backend()
+    )
+
+    signing_context = pkcs1_15.new(private_key)
+
     def __init__(self, secrets: bytes):
         """
         You **may not** change the arguments or returns of this function!
@@ -60,44 +82,38 @@ class Encoder:
         # TODO: encode the satellite frames so that they meet functional and
         #  security requirements
 
-        # self.idx+=1
-        # if self.idx%2==0:
-        #     frame="0Hello world".encode()
-        #     return struct.pack("<IQ", channel, timestamp) + frame
-        # IV=bytes.fromhex(os.urandom(16).hex())
+        if self.cw is None or timestamp//10000 > self.prev_ts:
 
-        IV = bytes.fromhex("ec32decad5e216f0d43618fce13e5040")
-        # print("timestamp",timestamp)
-        if self.cw is None or timestamp//10000>self.prev_ts:
-            time_salt = hashlib.sha256(str(timestamp//10000).encode()).digest()[:16]
-            mixed_iv = bytes(a ^ b for a, b in zip(IV, time_salt))
-            sk=bytes.fromhex(self.some_secrets.get(str(channel)))
-            self.cw=hashlib.pbkdf2_hmac('sha256',sk, mixed_iv, 1000, dklen=16)
+            timestamp_mod_bytes = str(timestamp//10000).encode()
+            time_salt = hashlib.sha256(timestamp_mod_bytes).digest()[:16]
+
+            mixed_iv = bytes(a ^ b for a, b in zip(self.IV, time_salt))
+
+            sk_hex = self.some_secrets.get(str(channel))
+            sk = bytes.fromhex(sk_hex)
+
+            self.cw = hashlib.pbkdf2_hmac('sha256',sk, mixed_iv, 1000, dklen=16)
             self.prev_ts=timestamp//10000
-            # print(sk.hex(),"--",mixed_iv.hex(),"--",self.cw.hex(),"--",timestamp//10000)
-            # print(time_salt.hex())
-            # print("-------------------")
-        self.idx+=1
-        # print(self.cw.hex(),self.idx)
-        # key_hex = self.some_secrets.get(str(channel))
-        # # print(f"Key used for channel {channel}: {key_hex}")
 
-        # if key_hex is None:
-        #     raise ValueError("No key found for channel")
+        self.frame_count+=1
 
-        # key = bytes.fromhex(key_hex)
-        # cipher = AES.new(key, AES.MODE_ECB)
+        # Create new AES cipher object
         cipher = AES.new(self.cw, AES.MODE_ECB)
+
         # Ensure frame is padded to a multiple of 16 bytes (AES block size)
-        pad_length = 16 - (len(frame) % 16)
-        frame_padded = frame + bytes([pad_length] * pad_length)
+        padded_frame = pad(frame, AES.block_size)
 
-        encrypted_frame = cipher.encrypt(frame_padded)
+        # Encrypt the frame
+        encrypted_frame = cipher.encrypt(padded_frame)
 
-        return struct.pack("<IQ", channel, timestamp) + encrypted_frame
+        # Hash the encrypted frame and sign
+        eframe_hash_obj = SHA256.new(encrypted_frame)
+        eframe_signature = self.signing_context.sign(hash_obj)
 
-        # return struct.pack("<IQ", channel, timestamp) + frame
+        # Create the final frame that will be sent
+        sgn_enc_frame = eframe_signature + encrypted_frame
 
+        return struct.pack("<IQ", channel, timestamp) + sgn_enc_frame
 
 def main():
     """A test main to one-shot encode a frame

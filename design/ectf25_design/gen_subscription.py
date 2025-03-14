@@ -5,7 +5,7 @@ Date: 2025
 This source file is part of an example system for MITRE's 2025 Embedded System CTF
 (eCTF). This code is being provided only for educational purposes for the 2025 MITRE
 eCTF competition, and may not meet MITRE standards for quality. Use this code at your
-own risk!
+own richannel_key_hex!
 
 Copyright: Copyright (c) 2025 The MITRE Corporation
 """
@@ -35,33 +35,42 @@ def gen_subscription(
     """
     # TODO: Update this function to provide a Decoder with whatever data it needs to
     #   subscribe to a new channel
-    # Load the json of the secrets file
+
     logger.debug(f"Device id: {device_id}")
+
+    # Load the secrets
     secrets = json.loads(secrets)
-    key_hex = secrets.get("master_keys").get(str(device_id))
-    if key_hex is None:
+
+    # Retrieve master key and channel key, generate an IV
+    master_key_hex = secrets.get("master_keys").get(str(device_id))
+    if master_key_hex is None:
         raise ValueError("No key found for device")
-    sk=secrets.get("keys").get(str(channel))
-    if sk is None:
+
+    channel_key_hex = secrets.get("channel_keys").get(str(channel))
+    if channel_key_hex is None:
         raise ValueError("No key found for channel")
-    key = bytes.fromhex(key_hex)
+
+    iv_hex = os.urandom(16).hex()
+
+    # Get the byte versions of keys and IV
+    master_key = bytes.fromhex(master_key_hex)
+    channel_key = bytes.fromhex(channel_key_hex)
+    iv = bytes.fromhex(iv_hex)
+
+    logger.debug("IV: ", iv_hex)
+    logger.debug("SK: ", channel_key_hex)
+
+    # Create a new cipher object
     cipher = AES.new(key, AES.MODE_ECB)
-    IV=bytes.fromhex(os.urandom(16).hex()) 
-    print("IV: ",IV.hex())
-    print("SK: ",sk)
+
     # Pack the data
-    packed_data = struct.pack("<IQQI16s16s", device_id, start, end, channel,bytes.fromhex(sk),IV)
+    packed_data = struct.pack("<IQQI16s16s", device_id, start, end, channel, channel_key, iv)
 
-    # Ensure packed data is a multiple of 16 (AES block size) using PKCS#7 padding
-    pad_length = 16 - (len(packed_data) % 16)
-    packed_padded = packed_data + bytes([pad_length] * pad_length)
+    # Ensure data is padded to a multiple of 16 bytes (AES block size)
+    padded_data = pad(packed_data, AES.block_size)
 
-    # Encrypt
-    encrypted_data = cipher.encrypt(packed_padded)
-    # You can use secrets generated using `gen_secrets` here like:
-    # secrets["some_secrets"]
-    # Which would return "EXAMPLE" in the reference design.
-    # Please note that the secrets are READ ONLY at this sage!
+    # Encrypt the data
+    encrypted_data = cipher.encrypt(padded_data)
 
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
     return encrypted_data
