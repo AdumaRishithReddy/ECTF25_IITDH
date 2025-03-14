@@ -33,7 +33,7 @@ class Encoder:
 
         # Load the json of the secrets file
         secrets = json.loads(secrets)
-        
+
 
         # Load the example secrets for use in Encoder.encode
         # This will be "EXAMPLE" in the reference design"
@@ -59,11 +59,13 @@ class Encoder:
         """
         # TODO: encode the satellite frames so that they meet functional and
         #  security requirements
+
         # self.idx+=1
         # if self.idx%2==0:
         #     frame="0Hello world".encode()
         #     return struct.pack("<IQ", channel, timestamp) + frame
-        # IV=bytes.fromhex(os.urandom(16).hex()) 
+        # IV=bytes.fromhex(os.urandom(16).hex())
+
         IV = bytes.fromhex("ec32decad5e216f0d43618fce13e5040")
         # print("timestamp",timestamp)
         if self.cw is None or timestamp//10000>self.prev_ts:
@@ -82,16 +84,16 @@ class Encoder:
 
         # if key_hex is None:
         #     raise ValueError("No key found for channel")
-        
+
         # key = bytes.fromhex(key_hex)
         # cipher = AES.new(key, AES.MODE_ECB)
         cipher = AES.new(self.cw, AES.MODE_ECB)
         # Ensure frame is padded to a multiple of 16 bytes (AES block size)
         pad_length = 16 - (len(frame) % 16)
         frame_padded = frame + bytes([pad_length] * pad_length)
-        
+
         encrypted_frame = cipher.encrypt(frame_padded)
-        
+
         return struct.pack("<IQ", channel, timestamp) + encrypted_frame
 
         # return struct.pack("<IQ", channel, timestamp) + frame
