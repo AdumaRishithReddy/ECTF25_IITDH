@@ -130,7 +130,7 @@ You should now be inside the OpenOCD shell where you can inspect the contents of
 
 1. Get the insecure bootloader `insecure.bin` from [Bootloader - eCTF 2025](https://ectfmitre.gitlab.io/ectf-website/2025/system/bootloader.html#ectf-bootloader)
 2. Mount the device as storage (should appear automatically in most OSs)
-3. Drag and drop the `.hex` file.
+3. Drag and drop the `.bin` file.
 4. Let the device auto restart.
 
 *Flashing your program*

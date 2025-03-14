@@ -5,7 +5,7 @@ Date: 2025
 This source file is part of an example system for MITRE's 2025 Embedded System CTF
 (eCTF). This code is being provided only for educational purposes for the 2025 MITRE
 eCTF competition, and may not meet MITRE standards for quality. Use this code at your
-own richannel_key_hex!
+own risk!
 
 Copyright: Copyright (c) 2025 The MITRE Corporation
 """
@@ -42,29 +42,46 @@ def gen_subscription(
     secrets = json.loads(secrets)
 
     # Retrieve master key and channel key, generate an IV
-    master_key_hex = secrets.get("master_keys").get(str(device_id))
+    channel_details = secrets["channel_details"]
+    decoder_details = secrets["decoder_details"]
+
+    verification_key = RSA.import_key(secrets["verification_key"])
+
+    master_key_hex = decoder_details[device_id]["master_key"]
     if master_key_hex is None:
         raise ValueError("No key found for device")
 
-    channel_key_hex = secrets.get("channel_keys").get(str(channel))
+    channel_key_hex = channel_details[channel]["channel_key"]
     if channel_key_hex is None:
         raise ValueError("No key found for channel")
 
-    iv_hex = os.urandom(16).hex()
+    iv_hex = channel_details[channel]["init_vector"]
+    if iv_hex is None:
+        raise ValueError("No key found for channel")
 
     # Get the byte versions of keys and IV
     master_key = bytes.fromhex(master_key_hex)
     channel_key = bytes.fromhex(channel_key_hex)
     iv = bytes.fromhex(iv_hex)
 
-    logger.debug("IV: ", iv_hex)
+    logger.debug("MK: ", master_key_hex)
     logger.debug("SK: ", channel_key_hex)
+    logger.debug("IV: ", iv_hex)
 
     # Create a new cipher object
-    cipher = AES.new(key, AES.MODE_ECB)
+    cipher = AES.new(master_key, AES.MODE_ECB)
+
+    ver_key_length = len(verification_key)
 
     # Pack the data
-    packed_data = struct.pack("<IQQI16s16s", device_id, start, end, channel, channel_key, iv)
+    packed_data = struct.pack(f"<IQQI16s16s{ver_key_len}s",
+                              device_id,
+                              start,
+                              end,
+                              channel,
+                              channel_key,
+                              iv,
+                              verification_key)
 
     # Ensure data is padded to a multiple of 16 bytes (AES block size)
     padded_data = pad(packed_data, AES.block_size)

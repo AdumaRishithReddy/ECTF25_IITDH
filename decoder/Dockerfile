@@ -23,7 +23,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     wget \
     libtool \
     texinfo \
-    unzip    
+    unzip
 
 # Install MSDK
 RUN apt-get install -y libc6-dev
@@ -40,4 +40,4 @@ WORKDIR /decoder
 ENTRYPOINT ["bash", "-c", "make release DECODER_ID=${DECODER_ID} && cp build/max78000.elf build/max78000.bin /out"]
 
 # Sample run command:
-# docker run --rm -v ./build_out:/out -v ./:/decoder -v ./secrets:/secrets -e DECODER_ID=0xdeadbeef decoder
+# docker run -v ./decoder/:/decoder -v ./global.secrets:/global.secrets:ro -v ./deadbeef_build:/out -e DECODER_ID=0xdeadbeef build-decoder

@@ -14,6 +14,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+from Crypto.PublicKey import RSA
+import base64
 
 from loguru import logger
 
@@ -37,21 +39,41 @@ def gen_secrets(channels: list[int]) -> bytes:
     # You can change this to generate any secret material
     # The secrets file will never be shared with attackers
     dec_ids = [
-    0xDEADBEEF, 0xCAFEBABE, 0xFEEDFACE, 0x8BADF00D,
-    0xC0FFEE00, 0xBAADF00D, 0xF00DBABE, 0xDEADFA11,
-    0xB16B00B5, 0x0BADC0DE
-]
+        0xDEADBEEF, 0xCAFEBABE, 0xFEEDFACE, 0x8BADF00D,
+        0xC0FFEE00, 0xBAADF00D, 0xF00DBABE, 0xDEADFA11,
+        0xB16B00B5, 0xBADC0DE0
+    ]
+
     # Create the secrets object
     # You can change this to generate any secret material
     # The secrets file will never be shared with attackers
+    key = RSA.generate(2048)
+    private_key = key.export_key()
+    public_key = key.publickey().export_key()
+
+    # Convert keys to a string format (Base64 encoding)
+    private_key_str = base64.b64encode(private_key).decode('utf-8')
+    public_key_str = base64.b64encode(public_key).decode('utf-8')
+
     secrets = {
-        "channels": channels,
-        "decoder_ids": dec_ids,
-        "master_keys": {str(dec_id): os.urandom(16).hex() for dec_id in dec_ids},
-        "channel_keys": {str(channel): os.urandom(16).hex() for channel in channels},
+        "channel_details": {
+            cnum: {
+                "channel_no": cnum,
+                "channel_key": os.urandom(16).hex(),
+                "init_vector": os.urandom(16).hex(),
+            }
+            for cnum in channels
+        },
+        "decoder_details": {
+            d_id : {
+                "decoder_id": d_id,
+                "master_key": os.urandom(16).hex(),
+            }
+            for d_id in dec_ids
+        },
+        "signing_key": private_key_str,
+        "verification_key": public_key_str,
     }
-
-
 
     # NOTE: if you choose to use JSON for your file type, you will not be able to
     # store binary data, and must either use a different file type or encode the
