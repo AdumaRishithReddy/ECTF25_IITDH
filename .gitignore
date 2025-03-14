@@ -1,5 +1,14 @@
 ## Project .gitignore ##
 
+# ---------------------------
+# Custom MITRE-eCTF gitignore
+
+global.secrets
+global.json
+deadbeef_c1.sub
+
+# ---------------------------
+
 .DS_Store
 .vscode/
 **/gcc
