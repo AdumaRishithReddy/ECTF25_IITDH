@@ -1,4 +1,4 @@
-# eCTF Insecure Example
+# eCTF Insecure Example - IITDh
 
 This repository holds the insecure example design for an eCTF Satellite TV System.
 
