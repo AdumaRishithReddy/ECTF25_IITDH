@@ -32,28 +32,28 @@ def gen_secrets(channels: list[int]) -> bytes:
 
     :returns: Contents of the secrets file
     """
-    # TODO: Update this function to generate any system-wide secrets needed by
-    #   your design
 
-    # Create the secrets object
-    # You can change this to generate any secret material
-    # The secrets file will never be shared with attackers
+    # List of valid decoder IDs
     dec_ids = [
         0xDEADBEEF, 0xCAFEBABE, 0xFEEDFACE, 0x8BADF00D,
         0xC0FFEE00, 0xBAADF00D, 0xF00DBABE, 0xDEADFA11,
         0xB16B00B5, 0xBADC0DE0
     ]
 
-    # Create the secrets object
-    # You can change this to generate any secret material
-    # The secrets file will never be shared with attackers
+    # Create the Frame signing and Verification keys
     key = RSA.generate(2048)
-    private_key = key.export_key()
-    public_key = key.publickey().export_key()
+    signing_key = key.export_key().decode('utf-8')
+    verification_key = key.publickey().export_key().decode('utf-8')
 
-    # Convert keys to a string format (Base64 encoding)
-    private_key_str = base64.b64encode(private_key).decode('utf-8')
-    public_key_str = base64.b64encode(public_key).decode('utf-8')
+    master_keys_list = {}
+
+    # Generate master keys for each decoder
+    for dec_id in dec_ids:
+        m_keys = RSA.generate(2048)
+        master_key_encoder = m_keys.export_key().decode('utf-8')
+        master_key_decoder = m_keys.publickey().export_key().decode('utf-8')
+        master_keys_list[dec_id] = (master_key_encoder, master_key_decoder)
+        print(f"{dec_id}")
 
     secrets = {
         "channel_details": {
@@ -62,22 +62,20 @@ def gen_secrets(channels: list[int]) -> bytes:
                 "channel_key": os.urandom(16).hex(),
                 "init_vector": os.urandom(16).hex(),
             }
-            for cnum in channels
+            for cnum in channels + [0]
         },
         "decoder_details": {
             d_id : {
                 "decoder_id": d_id,
-                "master_key": os.urandom(16).hex(),
+                "master_key_encoder": master_keys_list[dec_id][0],
+                "master_key_decoder": master_keys_list[dec_id][1],
             }
             for d_id in dec_ids
         },
-        "signing_key": private_key_str,
-        "verification_key": public_key_str,
+        "signing_key": signing_key,
+        "verification_key": verification_key,
     }
 
-    # NOTE: if you choose to use JSON for your file type, you will not be able to
-    # store binary data, and must either use a different file type or encode the
-    # binary data to hex, base64, or another type of ASCII-only encoding
     return json.dumps(secrets).encode()
 
 

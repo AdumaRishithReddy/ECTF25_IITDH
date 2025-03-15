@@ -14,7 +14,8 @@ import argparse
 import json
 from pathlib import Path
 import struct
-from Crypto.Cipher import AES
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
 import os
 
 from loguru import logger
@@ -33,61 +34,67 @@ def gen_subscription(
     :param end: Last timestamp the subscription is valid for
     :param channel: Channel to enable
     """
-    # TODO: Update this function to provide a Decoder with whatever data it needs to
-    #   subscribe to a new channel
 
     logger.debug(f"Device id: {device_id}")
+
+    # JSON keys are strings
+    device_id_str = str(device_id)
+    channel_str = str(channel)
 
     # Load the secrets
     secrets = json.loads(secrets)
 
-    # Retrieve master key and channel key, generate an IV
+    # Load channel and decoder details
     channel_details = secrets["channel_details"]
     decoder_details = secrets["decoder_details"]
 
-    verification_key = RSA.import_key(secrets["verification_key"])
+    # Load the private master key
+    master_key_str = decoder_details[device_id_str]["master_key_encoder"]
+    if master_key_str is None:
+        raise ValueError("No Master key found for device")
+    master_key_encoder = RSA.import_key(master_key_str)
 
-    master_key_hex = decoder_details[device_id]["master_key"]
-    if master_key_hex is None:
-        raise ValueError("No key found for device")
-
-    channel_key_hex = channel_details[channel]["channel_key"]
-    if channel_key_hex is None:
+    # Load channel key
+    channel_key_hex_str = channel_details[channel_str]["channel_key"]
+    if channel_key_hex_str is None:
         raise ValueError("No key found for channel")
 
-    iv_hex = channel_details[channel]["init_vector"]
-    if iv_hex is None:
-        raise ValueError("No key found for channel")
+    # Load the IV
+    iv_hex_str = channel_details[channel_str]["init_vector"]
+    if iv_hex_str is None:
+        raise ValueError("No IV found for channel")
 
-    # Get the byte versions of keys and IV
-    master_key = bytes.fromhex(master_key_hex)
-    channel_key = bytes.fromhex(channel_key_hex)
-    iv = bytes.fromhex(iv_hex)
+    # logger.debug(f"MK: {master_key_str}")
+    # logger.debug(f"SK: {channel_key_hex_str}")
+    # logger.debug(f"IV: {iv_hex_str}")
 
-    logger.debug("MK: ", master_key_hex)
-    logger.debug("SK: ", channel_key_hex)
-    logger.debug("IV: ", iv_hex)
+    # Get the half versions of keys and IV
+    channel_key_upper = int(channel_key_hex_str[0:16], 16)
+    channel_key_lower = int(channel_key_hex_str[16:], 16)
+    iv_upper = int(iv_hex_str[0:16], 16)
+    iv_lower = int(iv_hex_str[16:], 16)
 
-    # Create a new cipher object
-    cipher = AES.new(master_key, AES.MODE_ECB)
-
-    ver_key_length = len(verification_key)
+    # logger.debug(f"Channel Key Upper: {channel_key_upper}")
+    # logger.debug(f"Channel Key Lower: {channel_key_lower}")
+    # logger.debug(f"IV Upper: {iv_upper}")
+    # logger.debug(f"IV Lower: {iv_lower}")
 
     # Pack the data
-    packed_data = struct.pack(f"<IQQI16s16s{ver_key_len}s",
-                              device_id,
-                              start,
-                              end,
-                              channel,
-                              channel_key,
-                              iv,
-                              verification_key)
+    packed_data = struct.pack(f"<IQQIQQQQ",
+                            device_id,
+                            start,
+                            end,
+                            channel,
+                            channel_key_upper,
+                            channel_key_lower,
+                            iv_upper,
+                            iv_lower)
 
-    # Ensure data is padded to a multiple of 16 bytes (AES block size)
-    padded_data = pad(packed_data, AES.block_size)
+    # Create a new cipher object using OAEP padding
+    cipher = PKCS1_OAEP.new(master_key_encoder)
 
     # Encrypt the data
-    encrypted_data = cipher.encrypt(padded_data)
+    encrypted_data = cipher.encrypt(packed_data)
 
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
     return encrypted_data
