@@ -14,7 +14,7 @@ import argparse
 import json
 import os
 from pathlib import Path
-from Crypto.PublicKey import RSA
+from Crypto.PublicKey import ECC, RSA
 import base64
 
 from loguru import logger
@@ -41,19 +41,18 @@ def gen_secrets(channels: list[int]) -> bytes:
     ]
 
     # Create the Frame signing and Verification keys
-    key = RSA.generate(2048)
-    signing_key = key.export_key().decode('utf-8')
-    verification_key = key.publickey().export_key().decode('utf-8')
+    key = ECC.generate(curve='P-256')
+    signing_key = key.export_key(format='PEM')
+    verification_key = key.public_key().export_key(format='PEM')
 
     master_keys_list = {}
 
     # Generate master keys for each decoder
     for dec_id in dec_ids:
         m_keys = RSA.generate(2048)
-        master_key_encoder = m_keys.export_key().decode('utf-8')
-        master_key_decoder = m_keys.publickey().export_key().decode('utf-8')
-        master_keys_list[dec_id] = (master_key_encoder, master_key_decoder)
-        print(f"{dec_id}")
+        master_key_decoder = m_keys.export_key().decode('utf-8')
+        master_key_encoder = m_keys.public_key().export_key().decode('utf-8')
+        master_keys_list[dec_id] = (master_key_decoder, master_key_encoder)
 
     secrets = {
         "channel_details": {
@@ -67,8 +66,8 @@ def gen_secrets(channels: list[int]) -> bytes:
         "decoder_details": {
             d_id : {
                 "decoder_id": d_id,
-                "master_key_encoder": master_keys_list[dec_id][0],
-                "master_key_decoder": master_keys_list[dec_id][1],
+                "master_key_decoder": master_keys_list[dec_id][0],
+                "master_key_encoder": master_keys_list[dec_id][1],
             }
             for d_id in dec_ids
         },

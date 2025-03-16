@@ -14,16 +14,118 @@ import argparse
 import json
 from pathlib import Path
 import struct
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA as EncAlgo
+from Crypto.Cipher import PKCS1_OAEP as PadAlgo
 import os
 
 from loguru import logger
 
+def load_keys(secrets, device_id_str, channel_str):
+    """Load the master key, channel key, and initialization vector (IV) from the secrets.
 
-def gen_subscription(
-    secrets: bytes, device_id: int, start: int, end: int, channel: int
-) -> bytes:
+    :param secrets: Dictionary containing channel and decoder details.
+    :param device_id_str: String representation of the device ID.
+    :param channel_str: String representation of the channel.
+    :return: Tuple containing the master key encoder, channel key, and IV.
+    :raises ValueError: If the master key, channel key, or IV is not found.
+    """
+
+    # Load channel and decoder details
+    channel_details = secrets["channel_details"]
+    decoder_details = secrets["decoder_details"]
+
+    # Load the private master key
+    master_key_str = decoder_details[device_id_str]["master_key_encoder"]
+    if master_key_str is None:
+        raise ValueError("No Master key found for device")
+    master_key_encoder = EncAlgo.import_key(master_key_str)
+
+    # Load channel key
+    channel_key_hex_str = channel_details[channel_str]["channel_key"]
+    if channel_key_hex_str is None:
+        raise ValueError("No key found for channel")
+
+    # Load the IV
+    iv_hex_str = channel_details[channel_str]["init_vector"]
+    if iv_hex_str is None:
+        raise ValueError("No IV found for channel")
+
+    return master_key_encoder, channel_key_hex_str, iv_hex_str
+
+def create_subscription_struct(device_id, start, end, channel, channel_key_hex_str, iv_hex_str):
+    """Create a packed binary structure for the subscription data.
+
+    :param device_id: Device ID of the Decoder.
+    :param start: First timestamp the subscription is valid for.
+    :param end: Last timestamp the subscription is valid for.
+    :param channel: Channel to enable.
+    :param channel_key_hex_str: Hexadecimal string representation of the channel key.
+    :param iv_hex_str: Hexadecimal string representation of the initialization vector (IV).
+    :return: Packed binary data representing the subscription.
+    """
+
+    # Get the half versions of keys and IV
+    channel_key_upper = int(channel_key_hex_str[0:16], 16)
+    channel_key_lower = int(channel_key_hex_str[16:], 16)
+    iv_upper = int(iv_hex_str[0:16], 16)
+    iv_lower = int(iv_hex_str[16:], 16)
+
+    # Pack and return subscription.bin data
+    return struct.pack(f"<IQQIQQQQ",
+                       device_id,
+                       start,
+                       end,
+                       channel,
+                       channel_key_upper,
+                       channel_key_lower,
+                       iv_upper,
+                       iv_lower)
+
+def encrypt_subscription_struct(master_key_encoder, packed_data):
+    """Encrypt the packed subscription data using the master key encoder.
+
+    :param master_key_encoder: The master key used for encryption.
+    :param packed_data: The packed binary data to be encrypted.
+    :return: Encrypted subscription data.
+    """
+
+    # Create a cipher for encryption (EncAlgo)
+    cipher = PadAlgo.new(master_key_encoder)
+
+    # Return encrypted data
+    return cipher.encrypt(packed_data)
+
+def verify_encrypted_sub(decoder_details, device_id_str, encrypted_data, expected_values):
+    """Verify the decrypted subscription data against expected values.
+
+    :param decoder_details: Dictionary containing decoder details.
+    :param device_id_str: String representation of the device ID.
+    :param encrypted_data: Encrypted subscription data to be verified.
+    :param expected_values: Dictionary of expected values for verification.
+    :raises AssertionError: If any of the unpacked values do not match the expected values.
+    """
+
+    # Load the decoder master key
+    master_key_decoder = decoder_details[device_id_str]["master_key_decoder"]
+    master_key_decoder = EncAlgo.import_key(master_key_decoder)
+
+    # Create cipher for decryption
+    cipher_decoder = PadAlgo.new(master_key_decoder)
+    decrypted_data = cipher_decoder.decrypt(encrypted_data)
+
+    unpacked_data = struct.unpack(f"<IQQIQQQQ", decrypted_data)
+
+    # Verify each value
+    for key, expected_value in expected_values.items():
+        actual_value = unpacked_data[["device_id", "start", "end",
+                                      "channel", "channel_key_upper",
+                                      "channel_key_lower", "iv_upper",
+                                      "iv_lower"].index(key)]
+        assert actual_value == expected_value, f"{key} does not match: expected {expected_value}, got {actual_value}"
+
+        logger.debug(f"Verified {actual_value}")
+
+def gen_subscription(secrets, device_id, start, end, channel):
     """Generate the contents of a subscription.
 
     The output of this will be passed to the Decoder using ectf25.tv.subscribe
@@ -44,57 +146,30 @@ def gen_subscription(
     # Load the secrets
     secrets = json.loads(secrets)
 
-    # Load channel and decoder details
-    channel_details = secrets["channel_details"]
-    decoder_details = secrets["decoder_details"]
+    # Load keys
+    master_key_encoder, channel_key_hex_str, iv_hex_str = load_keys(secrets, device_id_str, channel_str)
 
-    # Load the private master key
-    master_key_str = decoder_details[device_id_str]["master_key_encoder"]
-    if master_key_str is None:
-        raise ValueError("No Master key found for device")
-    master_key_encoder = RSA.import_key(master_key_str)
+    # Create the subscription struct
+    packed_data = create_subscription_struct(device_id, start, end, channel, channel_key_hex_str, iv_hex_str)
 
-    # Load channel key
-    channel_key_hex_str = channel_details[channel_str]["channel_key"]
-    if channel_key_hex_str is None:
-        raise ValueError("No key found for channel")
+    # Encrypt the subscription struct
+    encrypted_data = encrypt_subscription_struct(master_key_encoder, packed_data)
 
-    # Load the IV
-    iv_hex_str = channel_details[channel_str]["init_vector"]
-    if iv_hex_str is None:
-        raise ValueError("No IV found for channel")
+    # Verify the encrypted subscription file
 
-    # logger.debug(f"MK: {master_key_str}")
-    # logger.debug(f"SK: {channel_key_hex_str}")
-    # logger.debug(f"IV: {iv_hex_str}")
-
-    # Get the half versions of keys and IV
-    channel_key_upper = int(channel_key_hex_str[0:16], 16)
-    channel_key_lower = int(channel_key_hex_str[16:], 16)
-    iv_upper = int(iv_hex_str[0:16], 16)
-    iv_lower = int(iv_hex_str[16:], 16)
-
-    # logger.debug(f"Channel Key Upper: {channel_key_upper}")
-    # logger.debug(f"Channel Key Lower: {channel_key_lower}")
-    # logger.debug(f"IV Upper: {iv_upper}")
-    # logger.debug(f"IV Lower: {iv_lower}")
-
-    # Pack the data
-    packed_data = struct.pack(f"<IQQIQQQQ",
-                            device_id,
-                            start,
-                            end,
-                            channel,
-                            channel_key_upper,
-                            channel_key_lower,
-                            iv_upper,
-                            iv_lower)
-
-    # Create a new cipher object using OAEP padding
-    cipher = PKCS1_OAEP.new(master_key_encoder)
-
-    # Encrypt the data
-    encrypted_data = cipher.encrypt(packed_data)
+    # expected_values = {
+    #     "device_id": device_id,
+    #     "start": start,
+    #     "end": end,
+    #     "channel": channel,
+    #     "channel_key_upper": int(channel_key_hex_str[0:16], 16),
+    #     "channel_key_lower": int(channel_key_hex_str[16:], 16),
+    #     "iv_upper": int(iv_hex_str[0:16], 16),
+    #     "iv_lower": int(iv_hex_str[16:], 16)
+    # }
+    #
+    #
+    # verify_encrypted_sub(secrets["decoder_details"], device_id_str, encrypted_data, expected_values)
 
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
     return encrypted_data
