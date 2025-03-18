@@ -14,13 +14,14 @@ import argparse
 import struct
 import os
 import json
+import hashlib
 
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
-import hashlib
-from Crypto.PublicKey import RSA
-from Crypto.Signature import pkcs1_15
+from Crypto.PublicKey import ECC
 from Crypto.Hash import SHA256
+from Crypto.Signature import DSS
+
 
 class Encoder:
 
@@ -40,9 +41,9 @@ class Encoder:
         self.channel_details = secrets["channel_details"]
         self.decoder_details = secrets["decoder_details"]
 
-        self.signing_key = RSA.import_key(secrets["signing_key"])
-        self.verification_key = RSA.import_key(secrets["verification_key"])
-        self.signing_context = pkcs1_15.new(self.signing_key)
+        self.signing_key = ECC.import_key(secrets["signing_key"])
+        self.verification_key = ECC.import_key(secrets["verification_key"])
+        self.signing_context = DSS.new(self.signing_key, 'fips-186-3')
 
         self.frame_count = 0
         self.current_control_word = {channel_no: None for channel_no in self.channel_details.keys()}
@@ -67,38 +68,44 @@ class Encoder:
         :returns: The encoded frame, which will be sent to the Decoder
         """
 
+        # JSON keys are strings
+        channel_str = str(channel)
+
         # -----------------------------------------------------------------
         # A new control word is generated
         #   1. at the start of the channel stream or
         #   2. when an interval boundary is crossed (here, 10000 units)
         # -----------------------------------------------------------------
-        if self.current_control_word[channel] is None or timestamp // 10000 > self.prev_ts[channel]:
+
+        cw_interval = 100000
+
+        if self.current_control_word[channel_str] is None or timestamp // cw_interval > self.prev_ts[channel_str]:
 
             # Calculating Salt, IV and MixedIV
-            timestamp_mod_bytes = str(timestamp // 10000).encode()
+            timestamp_mod_bytes = str(timestamp // cw_interval).encode()
             time_salt = hashlib.sha256(timestamp_mod_bytes).digest()[:16]
 
-            iv_hex = self.channel_details[channel]["init_vector"]
+            iv_hex = self.channel_details[channel_str]["init_vector"]
             iv = bytes.fromhex(iv_hex)
 
-            mixed_iv = bytes(int(time_salt) ^ int(iv))
+            mixed_iv = bytes(a ^ b for a, b in zip(time_salt, iv))
 
             # Retreiving the channel key
-            channel_key_hex = self.channel_details[channel]["channel_key"]
+            channel_key_hex = self.channel_details[channel_str]["channel_key"]
             channel_key = bytes.fromhex(channel_key_hex)
 
             # Generating a new control word
-            self.current_control_word[channel] = hashlib.pbkdf2_hmac('sha256',
+            self.current_control_word[channel_str] = hashlib.pbkdf2_hmac('sha256',
                                                                      channel_key,
                                                                      mixed_iv,
                                                                      1000,
                                                                      dklen=16)
 
             # Keeping track of when the last control word was generated
-            self.prev_ts[channel] = timestamp // 10000
+            self.prev_ts[channel_str] = timestamp // cw_interval
 
             # Creating new AES cipher object
-            self.cipher_objects[channel] = AES.new(self.current_control_word[channel],
+            self.cipher_objects[channel_str] = AES.new(self.current_control_word[channel_str],
                                                    AES.MODE_ECB)
 
         self.frame_count+=1
@@ -107,11 +114,11 @@ class Encoder:
         padded_frame = pad(frame, AES.block_size)
 
         # Encrypt the frame
-        encrypted_frame = self.cipher_objects[channel].encrypt(padded_frame)
+        encrypted_frame = self.cipher_objects[channel_str].encrypt(padded_frame)
 
         # Hash the encrypted frame and sign
         eframe_hash_obj = SHA256.new(encrypted_frame)
-        eframe_signature = self.signing_context.sign(hash_obj)
+        eframe_signature = self.signing_context.sign(eframe_hash_obj)
 
         # Create the final frame that will be sent
         sgn_enc_frame = eframe_signature + encrypted_frame
