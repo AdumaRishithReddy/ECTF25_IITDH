@@ -18,8 +18,13 @@ import hashlib
 
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
+
 from Crypto.PublicKey import ECC
+from Crypto.PublicKey import RSA
+
 from Crypto.Hash import SHA256
+
+from Crypto.Signature import pkcs1_15
 from Crypto.Signature import DSS
 
 
@@ -41,9 +46,13 @@ class Encoder:
         self.channel_details = secrets["channel_details"]
         self.decoder_details = secrets["decoder_details"]
 
-        self.signing_key = ECC.import_key(secrets["signing_key"])
-        self.verification_key = ECC.import_key(secrets["verification_key"])
-        self.signing_context = DSS.new(self.signing_key, 'fips-186-3')
+        # self.signing_key = ECC.import_key(secrets["signing_key"])
+        # self.verification_key = ECC.import_key(secrets["verification_key"])
+        # self.signing_context = DSS.new(self.signing_key, 'fips-186-3')  
+        
+        # Change ECC keys to RSA keys
+        self.signing_key = RSA.import_key(secrets["signing_key"])
+        self.verification_key = RSA.import_key(secrets["verification_key"])
 
         self.frame_count = 0
         self.current_control_word = {channel_no: None for channel_no in self.channel_details.keys()}
@@ -118,7 +127,9 @@ class Encoder:
 
         # Hash the encrypted frame and sign
         eframe_hash_obj = SHA256.new(encrypted_frame)
-        eframe_signature = self.signing_context.sign(eframe_hash_obj)
+        
+        # eframe_signature = self.signing_context.sign(eframe_hash_obj)
+        eframe_signature = pkcs1_15.new(self.signing_key).sign(eframe_hash_obj)
 
         # Create the final frame that will be sent
         sgn_enc_frame = eframe_signature + encrypted_frame
