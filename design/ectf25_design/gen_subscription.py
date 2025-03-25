@@ -15,11 +15,12 @@ import json
 from pathlib import Path
 import struct
 from Crypto.PublicKey import RSA as EncAlgo
-from Crypto.Cipher import PKCS1_OAEP as PadAlgo
+from Crypto.Cipher import PKCS1_v1_5 as PadAlgo
+from Crypto.Cipher import AES
 import os
 
 from loguru import logger
-
+rsa=0
 def load_keys(secrets, device_id_str, channel_str):
     """Load the master key, channel key, and initialization vector (IV) from the secrets.
 
@@ -35,10 +36,13 @@ def load_keys(secrets, device_id_str, channel_str):
     decoder_details = secrets["decoder_details"]
 
     # Load the private master key
-    master_key_str = decoder_details[device_id_str]["master_key_encoder"]
-    if master_key_str is None:
-        raise ValueError("No Master key found for device")
-    master_key_encoder = EncAlgo.import_key(master_key_str)
+    if(rsa):
+        master_key_str = decoder_details[device_id_str]["master_key_encoder"]
+        if master_key_str is None:
+            raise ValueError("No Master key found for device")
+        master_key_encoder = EncAlgo.import_key(master_key_str)
+    else:
+        master_key_encoder = bytes.fromhex(decoder_details[device_id_str]["master_key"])
 
     # Load channel key
     channel_key_hex_str = channel_details[channel_str]["channel_key"]
@@ -71,15 +75,13 @@ def create_subscription_struct(device_id, start, end, channel, channel_key_hex_s
     iv_lower = int(iv_hex_str[16:], 16)
 
     # Pack and return subscription.bin data
-    return struct.pack(f"<IQQIQQQQ",
+    return struct.pack(f"<IQQI16s16s",
                        device_id,
                        start,
                        end,
                        channel,
-                       channel_key_upper,
-                       channel_key_lower,
-                       iv_upper,
-                       iv_lower)
+                       bytes.fromhex(channel_key_hex_str),
+                       bytes.fromhex(iv_hex_str))
 
 def encrypt_subscription_struct(master_key_encoder, packed_data):
     """Encrypt the packed subscription data using the master key encoder.
@@ -88,12 +90,18 @@ def encrypt_subscription_struct(master_key_encoder, packed_data):
     :param packed_data: The packed binary data to be encrypted.
     :return: Encrypted subscription data.
     """
-
+    print(len(packed_data))
+    print(len(master_key_encoder))
     # Create a cipher for encryption (EncAlgo)
-    cipher = PadAlgo.new(master_key_encoder)
-
-    # Return encrypted data
-    return cipher.encrypt(packed_data)
+    if(rsa):
+        cipher = PadAlgo.new(master_key_encoder)
+        return cipher.encrypt(packed_data)
+    else:
+        cipher = AES.new(master_key_encoder, AES.MODE_ECB)
+        pad_length = 16 - (len(packed_data) % 16)
+        packed_padded = packed_data + bytes([pad_length] * pad_length)
+        encrypted_data = cipher.encrypt(packed_padded)
+        return encrypted_data
 
 def verify_encrypted_sub(decoder_details, device_id_str, encrypted_data, expected_values):
     """Verify the decrypted subscription data against expected values.

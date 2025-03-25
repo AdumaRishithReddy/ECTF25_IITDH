@@ -122,6 +122,7 @@ class Encoder:
 
         # Create the final frame that will be sent
         sgn_enc_frame = eframe_signature + encrypted_frame
+        # print(len(encrypted_frame))
 
         return struct.pack("<IQ", channel, timestamp) + sgn_enc_frame
 

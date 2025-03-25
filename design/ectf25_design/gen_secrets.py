@@ -32,7 +32,7 @@ def gen_secrets(channels: list[int]) -> bytes:
 
     :returns: Contents of the secrets file
     """
-
+    rsa=0
     # List of valid decoder IDs
     dec_ids = [
         0xDEADBEEF, 0xCAFEBABE, 0xFEEDFACE, 0x8BADF00D,
@@ -49,31 +49,55 @@ def gen_secrets(channels: list[int]) -> bytes:
 
     # Generate master keys for each decoder
     for dec_id in dec_ids:
-        m_keys = RSA.generate(2048)
-        master_key_decoder = m_keys.export_key().decode('utf-8')
-        master_key_encoder = m_keys.public_key().export_key().decode('utf-8')
-        master_keys_list[dec_id] = (master_key_decoder, master_key_encoder)
+        if(rsa):    
+            m_keys = RSA.generate(2048)
+            master_key_decoder = m_keys.export_key().decode('utf-8')
+            master_key_encoder = m_keys.public_key().export_key().decode('utf-8')
+            master_keys_list[dec_id] = (master_key_decoder, master_key_encoder)
+        else:
+            master_keys_list[dec_id] = os.urandom(16).hex()
 
-    secrets = {
-        "channel_details": {
-            cnum: {
-                "channel_no": cnum,
-                "channel_key": os.urandom(16).hex(),
-                "init_vector": os.urandom(16).hex(),
-            }
-            for cnum in channels + [0]
-        },
-        "decoder_details": {
-            d_id : {
-                "decoder_id": d_id,
-                "master_key_decoder": master_keys_list[dec_id][0],
-                "master_key_encoder": master_keys_list[dec_id][1],
-            }
-            for d_id in dec_ids
-        },
-        "signing_key": signing_key,
-        "verification_key": verification_key,
-    }
+    if(rsa):
+        secrets = {
+            "channel_details": {
+                cnum: {
+                    "channel_no": cnum,
+                    "channel_key": os.urandom(16).hex(),
+                    "init_vector": os.urandom(16).hex(),
+                }
+                for cnum in channels + [0]
+            },
+            "decoder_details": {
+                d_id : {
+                    "decoder_id": d_id,
+                    "master_key_decoder": master_keys_list[dec_id][0],
+                    "master_key_encoder": master_keys_list[dec_id][1],
+                }
+                for d_id in dec_ids
+            },
+            "signing_key": signing_key,
+            "verification_key": verification_key,
+        }
+    else:
+        secrets = {
+            "channel_details": {
+                cnum: {
+                    "channel_no": cnum,
+                    "channel_key": os.urandom(16).hex(),
+                    "init_vector": os.urandom(16).hex(),
+                }
+                for cnum in channels + [0]
+            },
+            "decoder_details": {
+                d_id : {
+                    "decoder_id": d_id,
+                    "master_key": master_keys_list[dec_id],
+                }
+                for d_id in dec_ids
+            },
+            "signing_key": signing_key,
+            "verification_key": verification_key,
+        }
 
     return json.dumps(secrets).encode()
 
