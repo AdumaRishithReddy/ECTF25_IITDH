@@ -90,8 +90,8 @@ def encrypt_subscription_struct(master_key_encoder, packed_data):
     :param packed_data: The packed binary data to be encrypted.
     :return: Encrypted subscription data.
     """
-    print(len(packed_data))
-    print(len(master_key_encoder))
+    # print(len(packed_data))
+    # print(len(master_key_encoder))
     # Create a cipher for encryption (EncAlgo)
     if(rsa):
         cipher = PadAlgo.new(master_key_encoder)

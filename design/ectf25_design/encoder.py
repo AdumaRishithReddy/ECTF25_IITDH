@@ -119,10 +119,18 @@ class Encoder:
         # Hash the encrypted frame and sign
         eframe_hash_obj = SHA256.new(encrypted_frame)
         eframe_signature = self.signing_context.sign(eframe_hash_obj)
+        
+        # print(eframe_hash_obj.hexdigest())
+        # print(eframe_signature.hex())
+        # print("---------------------------------------------------")
+        
+        # pubkey_der = self.verification_key.export_key(format="DER")
+        # print(", ".join(f"0x{b:02X}" for b in pubkey_der))
+        # print("---------------")
+
 
         # Create the final frame that will be sent
         sgn_enc_frame = eframe_signature + encrypted_frame
-        # print(len(encrypted_frame))
 
         return struct.pack("<IQ", channel, timestamp) + sgn_enc_frame
 
