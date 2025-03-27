@@ -10,22 +10,36 @@
  *
  * @copyright Copyright (c) 2025 The MITRE Corporation
  */
-
+#define WOLFSSL_USE_OPTIONS_H
 #if CRYPTO_EXAMPLE
 #ifndef ECTF_CRYPTO_H
 #define ECTF_CRYPTO_H
-#define KEY_LENGTH 16  // Derived key length
+#define KEY_LENGTH 16   // Derived key length
 #define ITERATIONS 1000 // Number of PBKDF2 iterations
 #define SALT_LENGTH 16
-
+#define WOLFSSL_NO_INT128
+#include <wolfssl/wolfssl/options.h>
 #include "wolfssl/wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfssl/wolfcrypt/hash.h"
 #include <wolfssl/wolfssl/wolfcrypt/pwdbased.h>
+#include <wolfssl/wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfssl/wolfcrypt/random.h>
+#include <wolfssl/ssl.h>
+#include <wolfssl/wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/ecc.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/asn.h>
+#include <wolfssl/wolfssl/wolfcrypt/asn_public.h>
+#include <wolfssl/wolfcrypt/coding.h> // For Base64_Decode
+#include <string.h>
 
 /******************************** MACRO DEFINITIONS ********************************/
 #define BLOCK_SIZE AES_BLOCK_SIZE
 #define KEY_SIZE 16
 #define HASH_SIZE MD5_DIGEST_SIZE
+#define DER_SIZE 2048
+#define RSA_KEY_SIZE 2048 // RSA 2048-bit key
+#define RSA_PEM_SIZE 2048
 
 /******************************** FUNCTION PROTOTYPES ********************************/
 /** @brief Encrypts plaintext using a symmetric cipher
@@ -72,6 +86,14 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintex
  * @return 0 on success, non-zero for other error
  */
 int hash(void *data, size_t len, uint8_t *hash_out);
+
+int pem_to_der(const char *pemKey, byte **derKey, int *derSize);
+
+int decrypt_rsa(const uint8_t* der_key, size_t key_size, 
+                const uint8_t* cipher, size_t cipher_len, 
+                uint8_t* decrypted, size_t decrypted_size);
+
+int hash_firmware_verify(const byte *fwAddr, word32 fwLen, const byte *sigBuf, word32 sigLen);
 
 #endif // CRYPTO_EXAMPLE
 #endif // ECTF_CRYPTO_H

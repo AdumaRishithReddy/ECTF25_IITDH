@@ -30,6 +30,7 @@ int read_bytes(void *buf, uint16_t len) {
     for (i = 0; i < len; i++) {
         if (i % 256 == 0 && i != 0) { // Send an ACK after receiving 256 bytes
             write_ack();
+            return;
         }
         result = uart_readbyte();
         if (result < 0) {  // if there was an error, return immediately
