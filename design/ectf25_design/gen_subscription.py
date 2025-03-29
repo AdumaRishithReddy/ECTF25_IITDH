@@ -68,12 +68,6 @@ def create_subscription_struct(device_id, start, end, channel, channel_key_hex_s
     :return: Packed binary data representing the subscription.
     """
 
-    # Get the half versions of keys and IV
-    channel_key_upper = int(channel_key_hex_str[0:16], 16)
-    channel_key_lower = int(channel_key_hex_str[16:], 16)
-    iv_upper = int(iv_hex_str[0:16], 16)
-    iv_lower = int(iv_hex_str[16:], 16)
-
     # Pack and return subscription.bin data
     return struct.pack(f"<IQQI16s16s",
                        device_id,
