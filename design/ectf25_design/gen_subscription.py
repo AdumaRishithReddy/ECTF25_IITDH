@@ -25,6 +25,7 @@ from Crypto.Util.Padding import pad, unpad
 from loguru import logger
 
 master_key_type = "AES"
+verify_before_write = False
 
 def load_keys(secrets, device_id_str, channel_str):
     """Load the master key, channel key, and initialization vector (IV) from the secrets.
@@ -50,7 +51,7 @@ def load_keys(secrets, device_id_str, channel_str):
     elif master_key_type == "AES":
         master_key_encoder = bytes.fromhex(master_key_str)
     else:
-        ValueError(f"Master Key type {master_key_type} undefined")
+        raise ValueError(f"Master Key type {master_key_type} undefined")
 
     # Load channel key
     channel_key_hex_str = channel_details[channel_str]["channel_key"]
@@ -116,10 +117,13 @@ def verify_encrypted_sub(master_key_decoder, encrypted_data, expected_values):
     if master_key_type == "RSA":
         master_key_decoder = RSA.import_key(master_key_decoder)
         cipher_decoder = PKCS1_v1_5.new(master_key_decoder)
-        decrypted_data = cipher_decoder.decrypt(encrypted_data)
+        sentinel = b'Error'
+        decrypted_data = cipher_decoder.decrypt(encrypted_data, sentinel)
+
+        if decrypted_data == sentinel:
+            raise Exception("Padding Error in RSA")
 
     elif master_key_type == "AES":
-        print(master_key_decoder)
         cipher_decoder = AES.new(bytes.fromhex(master_key_decoder), AES.MODE_ECB)
         decrypted_data = cipher_decoder.decrypt(encrypted_data)
         decrypted_data = unpad(decrypted_data, AES.block_size)
@@ -165,18 +169,18 @@ def gen_subscription(secrets, device_id, start, end, channel):
     encrypted_data = encrypt_subscription_struct(master_key_encoder, packed_data)
 
     # Verify the encrypted subscription file
-    expected_values = {
-        "device_id": device_id,
-        "start": start,
-        "end": end,
-        "channel": channel,
-        "channel_key": bytes.fromhex(channel_key_hex_str),
-        "iv": bytes.fromhex(iv_hex_str),
-    }
+    if verify_before_write:
+        expected_values = {
+            "device_id": device_id,
+            "start": start,
+            "end": end,
+            "channel": channel,
+            "channel_key": bytes.fromhex(channel_key_hex_str),
+            "iv": bytes.fromhex(iv_hex_str),
+        }
 
-    master_key_decoder = secrets["decoder_details"][device_id_str]["master_key_decoder"]
-
-    verify_encrypted_sub(master_key_decoder, encrypted_data, expected_values)
+        master_key_decoder = secrets["decoder_details"][device_id_str]["master_key_decoder"]
+        verify_encrypted_sub(master_key_decoder, encrypted_data, expected_values)
 
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
     return encrypted_data
