@@ -7,7 +7,6 @@ name = "ectf25_design"
 version = "2025.0+example"
 requires-python = ">=3.11"
 
-# TODO: add your custom dependencies to this list
 dependencies = [
     "loguru",
     "pycryptodome"

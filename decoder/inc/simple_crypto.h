@@ -14,10 +14,9 @@
 #if CRYPTO_EXAMPLE
 #ifndef ECTF_CRYPTO_H
 #define ECTF_CRYPTO_H
-#define KEY_LENGTH 16   // Derived key length
-#define ITERATIONS 1000 // Number of PBKDF2 iterations
-#define SALT_LENGTH 16
+
 #define WOLFSSL_NO_INT128
+
 #include <wolfssl/wolfssl/options.h>
 #include "wolfssl/wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfssl/wolfcrypt/hash.h"
@@ -55,7 +54,10 @@
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t *ciphertext);
+int encrypt_sym(const uint8_t *plaintext, const size_t len, const uint8_t *key, uint8_t *ciphertext);
+
+
+
 
 /** @brief Decrypts ciphertext using a symmetric cipher
  *
@@ -70,10 +72,10 @@ int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t *ciphertex
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
+int decrypt_sym(const uint8_t *ciphertext, const size_t len, const uint8_t *key, uint8_t *plaintext);
 
-void derive_key(uint8_t *sk, size_t sk_len, uint8_t *iv, uint8_t *derived_key);
 
-int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintext);
+
 
 /** @brief Hashes arbitrary-length data
  *
@@ -85,15 +87,25 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintex
  *
  * @return 0 on success, non-zero for other error
  */
-int hash(void *data, size_t len, uint8_t *hash_out);
+int hash(const void *data, const size_t len, uint8_t *hash_out);
 
-int pem_to_der(const char *pemKey, byte **derKey, int *derSize);
 
-int decrypt_rsa(const uint8_t* der_key, size_t key_size, 
-                const uint8_t* cipher, size_t cipher_len, 
-                uint8_t* decrypted, size_t decrypted_size);
 
-int hash_firmware_verify(const byte *fwAddr, word32 fwLen, const byte *sigBuf, word32 sigLen);
+/**
+ * @brief Decrypts data using RSA asymmetric decryption.
+
+ * @param cipher A pointer to the buffer containing the ciphertext to decrypt.
+ * @param cipher_len The length of the ciphertext buffer.
+ * @param der_key A pointer to the DER-encoded RSA private key.
+ * @param key_size The size of the DER-encoded key in bytes.
+ * @param decr_out_buf A pointer to the buffer where the decrypted data will be stored.
+ * @param decr_out_buf_size The size of the output buffer in bytes.
+ *
+ * @return On success, returns the length of the decrypted data; on error, returns -1.
+ */
+int decrypt_asym_rsa(const uint8_t* der_key, const size_t key_size, 
+                const uint8_t* cipher, const size_t cipher_len, 
+                uint8_t* decrypted, const size_t decrypted_size);
 
 #endif // CRYPTO_EXAMPLE
 #endif // ECTF_CRYPTO_H

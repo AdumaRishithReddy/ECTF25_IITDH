@@ -22,6 +22,7 @@ from Crypto.PublicKey import ECC
 from Crypto.Hash import SHA256
 from Crypto.Signature import DSS
 
+signature_type = "ECC"
 
 class Encoder:
 
@@ -68,8 +69,18 @@ class Encoder:
         :returns: The encoded frame, which will be sent to the Decoder
         """
 
+        # TODO: Remove this
+        def print_as_int(data: bytes, label: str):
+            out_str = label
+            for i in range(0, 13, 4):
+                part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
+                out_str += ' ' + str(part_int)
+
+            print(out_str)
+
         # JSON keys are strings
         channel_str = str(channel)
+
 
         # -----------------------------------------------------------------
         # A new control word is generated
@@ -77,18 +88,18 @@ class Encoder:
         #   2. when an interval boundary is crossed (here, 10000 units)
         # -----------------------------------------------------------------
 
-        cw_interval = 100000
+        cw_interval = 10000000
 
         if self.current_control_word[channel_str] is None or timestamp // cw_interval > self.prev_ts[channel_str]:
 
             # Calculating Salt, IV and MixedIV
             timestamp_mod_bytes = str(timestamp // cw_interval).encode()
-            time_salt = hashlib.sha256(timestamp_mod_bytes).digest()[:16]
+            time_digest = hashlib.sha256(timestamp_mod_bytes).digest()[:16]
 
             iv_hex = self.channel_details[channel_str]["init_vector"]
             iv = bytes.fromhex(iv_hex)
 
-            mixed_iv = bytes(a ^ b for a, b in zip(time_salt, iv))
+            mixed_iv = bytes(a ^ b for a, b in zip(time_digest, iv))
 
             # Retreiving the channel key
             channel_key_hex = self.channel_details[channel_str]["channel_key"]
@@ -108,10 +119,13 @@ class Encoder:
             self.cipher_objects[channel_str] = AES.new(self.current_control_word[channel_str],
                                                    AES.MODE_ECB)
 
+            print_as_int(self.current_control_word[channel_str], 'CW: ')
+
         self.frame_count+=1
 
         # Ensure frame is padded to a multiple of 16 bytes (AES block size)
         padded_frame = pad(frame, AES.block_size)
+        # print(len(frame), len(padded_frame), len(padded_frame) - len(frame))
 
         # Encrypt the frame
         encrypted_frame = self.cipher_objects[channel_str].encrypt(padded_frame)
@@ -119,11 +133,11 @@ class Encoder:
         # Hash the encrypted frame and sign
         eframe_hash_obj = SHA256.new(encrypted_frame)
         eframe_signature = self.signing_context.sign(eframe_hash_obj)
-        
+
         # print(eframe_hash_obj.hexdigest())
         # print(eframe_signature.hex())
         # print("---------------------------------------------------")
-        
+
         # pubkey_der = self.verification_key.export_key(format="DER")
         # print(", ".join(f"0x{b:02X}" for b in pubkey_der))
         # print("---------------")
@@ -132,6 +146,7 @@ class Encoder:
         # Create the final frame that will be sent
         sgn_enc_frame = eframe_signature + encrypted_frame
 
+        # Return the signed encrypted frame
         return struct.pack("<IQ", channel, timestamp) + sgn_enc_frame
 
 def main():
