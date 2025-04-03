@@ -51,10 +51,9 @@ int main(void)
 
     init();
     print_debug("Decoder Booted!\n");
+    print_debug("Ready\n");
 
     while (1) {
-        print_debug("Ready\n");
-
         STATUS_LED_GREEN();
 
         result = read_packet(&cmd, uart_buf, &pkt_len);

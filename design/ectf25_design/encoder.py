@@ -85,10 +85,10 @@ class Encoder:
         # -----------------------------------------------------------------
         # A new control word is generated
         #   1. at the start of the channel stream or
-        #   2. when an interval boundary is crossed (here, 10000 units)
+        #   2. when an interval boundary is crossed (here, 10M units)
         # -----------------------------------------------------------------
 
-        cw_interval = 10000000
+        cw_interval = 20000000
 
         if self.current_control_word[channel_str] is None or timestamp // cw_interval > self.prev_ts[channel_str]:
 
@@ -100,6 +100,8 @@ class Encoder:
             iv = bytes.fromhex(iv_hex)
 
             mixed_iv = bytes(a ^ b for a, b in zip(time_digest, iv))
+
+            print_as_int(mixed_iv, "Mixed IV: ")
 
             # Retreiving the channel key
             channel_key_hex = self.channel_details[channel_str]["channel_key"]

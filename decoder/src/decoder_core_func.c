@@ -256,8 +256,8 @@ int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) 
 
 
 
-
-
+//TODO: Remove frame count
+uint32_t frame_count = 0;
 int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
     channel_id_t channel_id = new_frame -> channel;
     timestamp_t frame_ts = new_frame -> timestamp;
@@ -280,9 +280,34 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             continue;
         }
 
+        if (frame_ts <= decoder_status.subscribed_channels[idx].last_frame_timestamp) {
+            snprintf(
+                output_buf,
+                128,
+                "Out of order frame with timestamp  %u. Last seen timestamp is %u\n", 
+                frame_ts, 
+                decoder_status.subscribed_channels[idx].last_frame_timestamp
+            );
+            print_debug(output_buf);
+
+            write_packet(DECODE_MSG, "ILLEGAL", 7);
+            return 0;
+        }
+
         // Generate a Control Word if it crosses the interval boundary
         if (frame_ts / CTRL_WRD_INTERVAL > decoder_status.subscribed_channels[idx].last_ctrl_wrd_gen_time) {
-
+            
+            //TODO: Remove this frame count debug print
+            snprintf(
+                output_buf,
+                128,
+                "Frame count since last control word is %u, %u\n", 
+                frame_count,
+                frame_ts
+            );
+            print_debug(output_buf);
+            frame_count = 0;
+            
             byte_t time_digest[32];
             byte_t mixed_iv_buf[INIT_VEC_LENGTH];
             byte_t derived_ctrl_wrd[CTRL_WRD_LENGTH];
@@ -307,6 +332,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
 
             // TODO: Remove this (Prints CW on new CW)
             // print_as_int(derived_ctrl_wrd, 4);
+            print_as_int(mixed_iv_buf, 4);
 
             // Update the last timestamp when you generated a Control Word
             decoder_status.subscribed_channels[idx].last_ctrl_wrd_gen_time = frame_ts / CTRL_WRD_INTERVAL;
@@ -330,6 +356,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         }
 
         // Write the decrypted frame data to UART
+        frame_count++;
         write_packet(DECODE_MSG, decr_frame_data_buf, FRAME_SIZE - pad_length);
 
         return 0;
@@ -372,8 +399,11 @@ void init()
             subscription[i].end_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
             subscription[i].active = false;
 
-            memset(decoder_status.subscribed_channels[i].subscription_key, 0, SUBS_KEY_LENGTH);
-            memset(decoder_status.subscribed_channels[i].init_vector, 0, INIT_VEC_LENGTH);
+            memset(subscription[i].subscription_key, 0, SUBS_KEY_LENGTH);
+            memset(subscription[i].init_vector, 0, INIT_VEC_LENGTH);
+            memset(subscription[i].control_word, 0, INIT_VEC_LENGTH);
+            subscription[i].last_ctrl_wrd_gen_time = 0;
+            subscription[i].last_frame_timestamp = 0;
         }
 
         // Write the starting channel subscriptions into flash.

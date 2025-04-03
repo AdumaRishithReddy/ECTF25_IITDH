@@ -39,7 +39,7 @@
 #define CTRL_WRD_LENGTH 16
 #define PBKDF2_ITERATIONS 1000 // Number of PBKDF2 iterations
 #define PBKDF2_SALT_LENGTH 16
-#define CTRL_WRD_INTERVAL 10000000
+#define CTRL_WRD_INTERVAL 20000000
 // This is a canary value so we can confirm whether this decoder has booted before
 
 /**********************************************************
@@ -95,6 +95,7 @@ typedef struct
     byte_t init_vector[INIT_VEC_LENGTH];
     byte_t control_word[CTRL_WRD_LENGTH];
     timestamp_t last_ctrl_wrd_gen_time;
+    timestamp_t last_frame_timestamp;
 } channel_status_t;
 
 typedef struct
