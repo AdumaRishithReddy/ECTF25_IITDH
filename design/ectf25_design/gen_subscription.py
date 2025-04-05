@@ -17,6 +17,7 @@ import struct
 from Crypto.PublicKey import RSA as EncAlgo
 from Crypto.Cipher import PKCS1_v1_5 as PadAlgo
 from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
 import os
 
 from loguru import logger
@@ -98,8 +99,9 @@ def encrypt_subscription_struct(master_key_encoder, packed_data):
         return cipher.encrypt(packed_data)
     else:
         cipher = AES.new(master_key_encoder, AES.MODE_ECB)
-        pad_length = 16 - (len(packed_data) % 16)
-        packed_padded = packed_data + bytes([pad_length] * pad_length)
+        # pad_length = 16 - (len(packed_data) % 16)
+        # packed_padded = packed_data + bytes([pad_length] * pad_length)
+        packed_padded = pad(packed_data, AES.block_size)
         encrypted_data = cipher.encrypt(packed_padded)
         return encrypted_data
 
@@ -156,7 +158,7 @@ def gen_subscription(secrets, device_id, start, end, channel):
 
     # Load keys
     master_key_encoder, channel_key_hex_str, iv_hex_str = load_keys(secrets, device_id_str, channel_str)
-
+    print(channel_key_hex_str,iv_hex_str)
     # Create the subscription struct
     packed_data = create_subscription_struct(device_id, start, end, channel, channel_key_hex_str, iv_hex_str)
 

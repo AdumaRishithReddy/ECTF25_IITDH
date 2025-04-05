@@ -30,6 +30,7 @@
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfssl/wolfcrypt/asn_public.h>
+#include <wolfssl/wolfcrypt/signature.h>
 #include <wolfssl/wolfcrypt/coding.h> // For Base64_Decode
 #include <string.h>
 
@@ -93,7 +94,9 @@ int decrypt_rsa(const uint8_t* der_key, size_t key_size,
                 const uint8_t* cipher, size_t cipher_len, 
                 uint8_t* decrypted, size_t decrypted_size);
 
-int hash_firmware_verify(const byte *fwAddr, word32 fwLen, const byte *sigBuf, word32 sigLen);
+void Initialize_ECC(ecc_key* eccKey);
+
+int hash_firmware_verify(const byte *fwAddr, word32 fwLen, const byte *sigBuf, word32 sigLen,ecc_key* eccKey);
 
 #endif // CRYPTO_EXAMPLE
 #endif // ECTF_CRYPTO_H

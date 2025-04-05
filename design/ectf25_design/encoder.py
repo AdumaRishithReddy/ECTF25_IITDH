@@ -21,7 +21,9 @@ from Crypto.Util.Padding import pad
 from Crypto.PublicKey import ECC
 from Crypto.Hash import SHA256
 from Crypto.Signature import DSS
+# from asn1crypto.core import Sequence, Integer
 
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 
 class Encoder:
 
@@ -42,8 +44,11 @@ class Encoder:
         self.decoder_details = secrets["decoder_details"]
 
         self.signing_key = ECC.import_key(secrets["signing_key"])
+        # self.signing_key.curve = "NIST P-384"
+        print(self.signing_key.curve)
         self.verification_key = ECC.import_key(secrets["verification_key"])
-        self.signing_context = DSS.new(self.signing_key, 'fips-186-3')
+        print(self.verification_key.export_key(format="DER").hex())
+        self.signing_context = DSS.new(self.signing_key, 'fips-186-3',encoding='binary')
 
         self.frame_count = 0
         self.current_control_word = {channel_no: None for channel_no in self.channel_details.keys()}
@@ -70,18 +75,20 @@ class Encoder:
 
         # JSON keys are strings
         channel_str = str(channel)
-
+        # print(self.current_control_word)
         # -----------------------------------------------------------------
         # A new control word is generated
         #   1. at the start of the channel stream or
         #   2. when an interval boundary is crossed (here, 10000 units)
         # -----------------------------------------------------------------
 
-        cw_interval = 100000
-
+        cw_interval = 5000000
+        # print("Frame count: ", self.frame_count)
         if self.current_control_word[channel_str] is None or timestamp // cw_interval > self.prev_ts[channel_str]:
 
             # Calculating Salt, IV and MixedIV
+            # print("Generating new control word")
+            # 15:19:44.034  15:20:33.162
             timestamp_mod_bytes = str(timestamp // cw_interval).encode()
             time_salt = hashlib.sha256(timestamp_mod_bytes).digest()[:16]
 
@@ -109,19 +116,33 @@ class Encoder:
                                                    AES.MODE_ECB)
 
         self.frame_count+=1
-
+        # print(self.current_control_word[channel_str].hex())
+        # print("--------------------------------------")
         # Ensure frame is padded to a multiple of 16 bytes (AES block size)
+        # if len(frame) % AES.block_size != 0:
+        #     padded_frame = pad(frame, AES.block_size)
+        # else:
+        #     padded_frame = frame
         padded_frame = pad(frame, AES.block_size)
-
+        # print(len(padded_frame))
+        # print(padded_frame.hex())
         # Encrypt the frame
         encrypted_frame = self.cipher_objects[channel_str].encrypt(padded_frame)
 
         # Hash the encrypted frame and sign
         eframe_hash_obj = SHA256.new(encrypted_frame)
         eframe_signature = self.signing_context.sign(eframe_hash_obj)
-        
+        r = int.from_bytes(eframe_signature[:32], byteorder='big')
+        s = int.from_bytes(eframe_signature[32:], byteorder='big')
+        asn1_signature = encode_dss_signature(r, s)
+        # print(asn1_signature.hex())
+        # print(len(asn1_signature))
+        # der_signature = encoder.encode(signature_asn1)
         # print(eframe_hash_obj.hexdigest())
+        # print(der_signature.hex())
         # print(eframe_signature.hex())
+        # print(len(eframe_signature))
+        # print(len(asn1_signature))
         # print("---------------------------------------------------")
         
         # pubkey_der = self.verification_key.export_key(format="DER")
@@ -130,7 +151,10 @@ class Encoder:
 
 
         # Create the final frame that will be sent
-        sgn_enc_frame = eframe_signature + encrypted_frame
+        sgn_enc_frame = encrypted_frame + eframe_signature
+        # sgn_enc_frame = signature_raw + encrypted_frame
+        
+
 
         return struct.pack("<IQ", channel, timestamp) + sgn_enc_frame
 
