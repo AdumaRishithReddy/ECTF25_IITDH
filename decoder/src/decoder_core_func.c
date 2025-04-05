@@ -19,9 +19,10 @@
 // This is used to track decoder subscriptions
 volatile flash_entry_t decoder_status;
 
-byte_t rsa_private_master_key[/*$LEN_RSA_PRIV_KEY$*/] /*$RSA_PRIV_KEY$*/;
-byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
-byte_t ecc_public_verif_key[/*$LEN_ECC_PUBL_KEY$*/] /*$ECC_PUBL_KEY$*/;
+const byte_t rsa_private_master_key[/*$LEN_RSA_PRIV_KEY$*/] /*$RSA_PRIV_KEY$*/;
+const byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
+const byte_t ecc_public_verif_key[/*$LEN_ECC_PUBL_KEY$*/] /*$ECC_PUBL_KEY$*/;
+// const byte ecc_public_verif_key[]
 
 char output_buf[128];
 
@@ -45,6 +46,36 @@ int is_subscribed(const channel_id_t channel) {
 /**********************************************************
  ************ CRYPTOGRAPHIC SUPPORT FUNCTIONS *************
  **********************************************************/
+ void initialize_frame_verifier_ecc(ecc_key* ecc_key_struct) {
+
+    // Wolfcrypt initialization of the ECC Key structure
+    wc_ecc_init(ecc_key_struct);
+
+    // Parse ASN.1 DER key
+    uint32_t iteration_idx = 0;
+    int ret;
+
+    ret = wc_EccPublicKeyDecode(ecc_public_verif_key, &iteration_idx, ecc_key_struct, sizeof(ecc_public_verif_key));
+    if (ret != 0) {
+        wc_ecc_free(ecc_key_struct);
+        snprintf(output_buf, 128, "Failed to decode ASN.1 DER key. Error code %d\n", ret);
+        print_error(output_buf);
+    }
+
+    // Verify key is valid
+    ret = wc_ecc_check_key(ecc_key_struct);
+    if (ret != 0) {
+        wc_ecc_free(ecc_key_struct);
+        snprintf(output_buf, 128, "Imported key is invalid. Error code %d\n", ret);
+        print_error(output_buf);
+    }
+    else {
+        print_debug("Imported ECC key is valid\n");
+    }
+}
+
+
+
 int derive_control_word(const byte_t *sk_buf, 
                         const byte_t *iv_buf, 
                         byte_t *derived_control_word)

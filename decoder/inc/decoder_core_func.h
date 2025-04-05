@@ -111,6 +111,16 @@ int derive_control_word(const byte_t *subscription_key,
 
 
 
+
+/** @brief Initializes the ECC key.
+ *
+ *  @param eccKey A pointer to the ECC key used for verifying frame signatures.
+ *
+ *  @return void
+ */
+void initialize_frame_verifier_ecc(ecc_key* ecc_key_struct);
+
+
 /**
  * @brief Decrypts an encrypted frame to produce the raw frame data.
  *
