@@ -78,6 +78,9 @@ class Encoder:
 
             print(out_str)
 
+        if len(frame) > 64:
+            raise ValueError(f"Frame length ({len(frame)}) must be less than or equal to 64")
+
         # JSON keys are strings
         channel_str = str(channel)
 
@@ -126,9 +129,21 @@ class Encoder:
 
         self.frame_count+=1
 
+        # Padding to the neart AES block:
+        #     - 61B frame: Gives a 64B padded frame
+        #     - 62B frame: Gives a 64B padded frame
+        #     - 62B frame: Gives a 64B padded frame
+        #     - 63B frame: Gives a 64B padded frame
+        #     - 64B frame: Gives a 80B padded frame!!!
+        # Since we expect all encoded frames to be of same size (at the decoder)
+        # we artificially inflate all frame to 65B. The next pad converts
+        # it to an 80B frame.
+        initial_pad_length = 65 - len(frame)
+        partially_padded_frame = frame + initial_pad_length.to_bytes() * initial_pad_length
+
         # Ensure frame is padded to a multiple of 16 bytes (AES block size)
-        padded_frame = pad(frame, AES.block_size)
-        # print(len(frame), len(padded_frame), len(padded_frame) - len(frame))
+        # Here, we always know that the padded_frame will be 80B
+        padded_frame = pad(partially_padded_frame, AES.block_size)
 
         # Encrypt the frame
         encrypted_frame = self.cipher_objects[channel_str].encrypt(padded_frame)

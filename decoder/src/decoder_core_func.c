@@ -22,7 +22,7 @@ volatile flash_entry_t decoder_status;
 const byte_t rsa_private_master_key[/*$LEN_RSA_PRIV_KEY$*/] /*$RSA_PRIV_KEY$*/;
 const byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
 const byte_t ecc_public_verif_key[/*$LEN_ECC_PUBL_KEY$*/] /*$ECC_PUBL_KEY$*/;
-// const byte ecc_public_verif_key[]
+ecc_key ecc_sig_verifier;
 
 char output_buf[128];
 
@@ -46,32 +46,100 @@ int is_subscribed(const channel_id_t channel) {
 /**********************************************************
  ************ CRYPTOGRAPHIC SUPPORT FUNCTIONS *************
  **********************************************************/
- void initialize_frame_verifier_ecc(ecc_key* ecc_key_struct) {
+ int initialize_frame_verifier_ecc(ecc_key* ecc_key_instance, 
+                                    const byte_t *verification_key_der, 
+                                    const size_t ver_key_len) {
 
     // Wolfcrypt initialization of the ECC Key structure
-    wc_ecc_init(ecc_key_struct);
+    wc_ecc_init(ecc_key_instance);
 
     // Parse ASN.1 DER key
     uint32_t iteration_idx = 0;
     int ret;
 
-    ret = wc_EccPublicKeyDecode(ecc_public_verif_key, &iteration_idx, ecc_key_struct, sizeof(ecc_public_verif_key));
+    ret = wc_EccPublicKeyDecode(verification_key_der, &iteration_idx, ecc_key_instance, ver_key_len);
     if (ret != 0) {
-        wc_ecc_free(ecc_key_struct);
+        wc_ecc_free(ecc_key_instance);
         snprintf(output_buf, 128, "Failed to decode ASN.1 DER key. Error code %d\n", ret);
         print_error(output_buf);
+        return -1;
     }
 
     // Verify key is valid
-    ret = wc_ecc_check_key(ecc_key_struct);
+    ret = wc_ecc_check_key(ecc_key_instance);
     if (ret != 0) {
-        wc_ecc_free(ecc_key_struct);
+        wc_ecc_free(ecc_key_instance);
         snprintf(output_buf, 128, "Imported key is invalid. Error code %d\n", ret);
         print_error(output_buf);
+        return -1;
     }
     else {
         print_debug("Imported ECC key is valid\n");
     }
+
+    return 0;
+}
+
+
+
+
+int verify_frame_signature(const byte *frame_data, const uint32_t frame_data_len,
+                         const byte *signature_buf, const uint32_t signature_len, 
+                         const ecc_key* ecc_key_instance) {
+
+    // char sigHexaft[200]; // Needs to be 2*signature_len + 1 for hex representation
+    // char *ptra = sigHexaft;
+
+    // ptra += sprintf(ptra, "Raw Signature (%d bytes): ", signature_len);
+    // for (uint32_t i = 0; i < signature_len; i++) {
+    //     ptra += sprintf(ptra, "%02X", signature_buf[i]);
+    // }
+    // print_debug(sigHexaft);
+    // char fwBuf[200]; // Needs to be 2*signature_len + 1 for hex representation
+    // char *ptrb = fwBuf;
+
+    // ptrb += sprintf(ptrb, "Raw Frame (%d bytes): ", frame_data_len);
+    // for (uint32_t i = 0; i < frame_data_len; i++) {
+    //     ptrb += sprintf(ptrb, "%02X", frame_data[i]);
+    // }
+    // print_debug(fwBuf);
+
+    // Your ASN.1 DER public key
+
+    // byte derSig[72]; // ECC DER signatures are typically <= 72 bytes
+    // uint32_t dersignature_len = sizeof(derSig);
+
+    // ret = wc_ecc_rs_to_sig(
+    //     signature_buf,      // R (first 32 bytes)
+    //     signature_buf + 32, // S (next 32 bytes)
+    //     derSig,      // Output DER buffer
+    //     &dersignature_len   // Output DER length
+    // );
+
+    // if (ret != 0)
+    // {   char errStr[50];
+    //     sprintf(errStr,"Failed to convert R||S to DER: %d(%s)\n", ret,wc_GetErrorString(ret));
+    //     print_debug(errStr);
+    //     wc_ecc_free(&eccKey);
+    //     return ret;
+    // }
+
+    // Verify signature (assuming signature_buf is in DER format)
+    ret = wc_SignatureVerify(
+        WC_HASH_TYPE_SHA256, WC_SIGNATURE_TYPE_ECC,
+        frame_data, frame_data_len,
+        signature_buf, signature_len,
+        ecc_key_instance, sizeof(ecc_key_instance));
+
+    if (ret < 0) {
+        snprintf(output_buf, 128, "Signature verification failed! Error code: %d\n", ret);
+        print_error(output_buf);
+        return -1;
+    } else {
+        print_debug("Signature verification successful\n");
+    }
+
+    return 0;
 }
 
 
@@ -370,6 +438,9 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
 
 
         // TODO: Verify frame signature
+        verify_frame_signature(new_frame -> data, FRAME_SIZE, 
+                                new_frame -> sign, SIGNATURE_SIZE,
+                                &ecc_sig_verifier);
 
         // Decrypt the frame
         byte_t decr_frame_data_buf[FRAME_SIZE];
@@ -378,16 +449,22 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         }
 
         // Calculate padding
-        uint8_t pad_length = decr_frame_data_buf[FRAME_SIZE - 1];
-        if (pad_length == 0 || pad_length > BLOCK_SIZE) {
-            snprintf(output_buf, 128, "Invalid padding length! %d\n", pad_length);
+        uint8_t aes_pad_length = decr_frame_data_buf[FRAME_SIZE - 1];
+        if (aes_pad_length != 15) {
+            snprintf(output_buf, 128, "Invalid AES padding length! %d\n", aes_pad_length);
+            print_error(output_buf);
+            return -1;
+        }
+        uint8_t frame_pad_length = decr_frame_data_buf[FRAME_SIZE - aes_pad_length - 1]
+        if (frame_pad_length == 0 || frame_pad_length > MAX_DECR_FRAME_SIZE) {
+            snprintf(output_buf, 128, "Invalid Frame padding length! %d\n", frame_pad_length);
             print_error(output_buf);
             return -1;
         }
 
         // Write the decrypted frame data to UART
         frame_count++;
-        write_packet(DECODE_MSG, decr_frame_data_buf, FRAME_SIZE - pad_length);
+        write_packet(DECODE_MSG, decr_frame_data_buf, FRAME_SIZE - aes_pad_length - frame_pad_length);
 
         return 0;
     }
@@ -443,10 +520,17 @@ void init()
         flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
     }
 
+    // Initialize the ECC 
+    ret = initialize_frame_verifier_ecc(&ecc_sig_verifier, ecc_public_verif_key, sizeof(ecc_public_verif_key));
+    if (ret < 0) {
+        STATUS_LED_ERROR();
+        // if verfiier fails to initialize, do not continue to execute
+        while (1);
+    }
+
     // Initialize the uart peripheral to enable serial I/O
     ret = uart_init();
-    if (ret < 0)
-    {
+    if (ret < 0) {
         STATUS_LED_ERROR();
         // if uart fails to initialize, do not continue to execute
         while (1);
