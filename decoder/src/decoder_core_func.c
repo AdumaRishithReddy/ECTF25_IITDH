@@ -78,7 +78,6 @@ int derive_control_word(const byte_t *sk_buf,
 
 
 
-
 // TODO: pkt_len is dangerous TV controlled value
 int decrypt_subscription_rsa(const pkt_len_t pkt_len, 
                             const byte_t *encr_update_packet, 

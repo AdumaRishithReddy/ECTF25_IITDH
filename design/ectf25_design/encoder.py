@@ -88,7 +88,8 @@ class Encoder:
         #   2. when an interval boundary is crossed (here, 10M units)
         # -----------------------------------------------------------------
 
-        cw_interval = 20000000
+        cw_interval = 5000000
+        pbkdf2_iterations = 500
 
         if self.current_control_word[channel_str] is None or timestamp // cw_interval > self.prev_ts[channel_str]:
 
@@ -111,7 +112,7 @@ class Encoder:
             self.current_control_word[channel_str] = hashlib.pbkdf2_hmac('sha256',
                                                                      channel_key,
                                                                      mixed_iv,
-                                                                     1000,
+                                                                     pbkdf2_iterations,
                                                                      dklen=16)
 
             # Keeping track of when the last control word was generated

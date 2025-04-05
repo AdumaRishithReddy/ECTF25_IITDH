@@ -33,6 +33,7 @@
 #define DEFAULT_CHANNEL_TIMESTAMP 0xFFFFFFFFFFFFFFFF
 #define DEFAULT_CHANNEL_ID 0xFFFFFFFF
 #define FLASH_FIRST_BOOT 0xDEADBEEF
+// This is a canary value so we can confirm whether this decoder has booted before
 
 #define SUBS_KEY_LENGTH 16
 #define INIT_VEC_LENGTH 16
@@ -40,7 +41,6 @@
 #define PBKDF2_ITERATIONS 1000 // Number of PBKDF2 iterations
 #define PBKDF2_SALT_LENGTH 16
 #define CTRL_WRD_INTERVAL 20000000
-// This is a canary value so we can confirm whether this decoder has booted before
 
 /**********************************************************
  *********** COMMUNICATION PACKET DEFINITIONS *************
