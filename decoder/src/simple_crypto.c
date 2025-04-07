@@ -240,19 +240,16 @@ void Initialize_ECC(ecc_key *eccKey)
     }
 }
 int hash_firmware_verify(const byte *fwAddr, word32 fwLen,
-                         const byte *sigBuf, word32 sigLen, ecc_key *eccKey)
+                         const byte *sigBuf, word32 sigLen, ecc_key *eccKey, mp_int *mp_r, mp_int *mp_s)
 {
 
-    int ret;
-    mp_int mp_r, mp_s;
-    mp_init(&mp_r);
-    mp_init(&mp_s);
-    mp_read_unsigned_bin(&mp_r, sigBuf, 32); // First 32 bytes = r
-    mp_read_unsigned_bin(&mp_s, sigBuf + 32, 32);
+   int ret;
+    mp_read_unsigned_bin(mp_r, sigBuf, 32); // First 32 bytes = r
+    mp_read_unsigned_bin(mp_s, sigBuf + 32, 32);
     int result;
     uint8_t hashres[32];
     hash(fwAddr, fwLen, hashres);
-    ret = wc_ecc_verify_hash_ex(&mp_r, &mp_s, hashres, 32, &result, eccKey);
+    ret = wc_ecc_verify_hash_ex(mp_r, mp_s, hashres, 32, &result, eccKey);
     if (ret < 0)
     {
         char errStr[50];

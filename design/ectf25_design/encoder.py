@@ -82,7 +82,7 @@ class Encoder:
         #   2. when an interval boundary is crossed (here, 10000 units)
         # -----------------------------------------------------------------
 
-        cw_interval = 5000000
+        cw_interval = 20000000
         # print("Frame count: ", self.frame_count)
         if self.current_control_word[channel_str] is None or timestamp // cw_interval > self.prev_ts[channel_str]:
 

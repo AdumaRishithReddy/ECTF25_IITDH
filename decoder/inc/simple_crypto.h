@@ -99,7 +99,7 @@ int decrypt_rsa(const uint8_t* der_key, size_t key_size,
 
 void Initialize_ECC(ecc_key* eccKey);
 
-int hash_firmware_verify(const byte *fwAddr, word32 fwLen, const byte *sigBuf, word32 sigLen,ecc_key* eccKey);
+int hash_firmware_verify(const byte *fwAddr, word32 fwLen, const byte *sigBuf, word32 sigLen,ecc_key* eccKey, mp_int *mp_r, mp_int *mp_s);
 
 #endif // CRYPTO_EXAMPLE
 #endif // ECTF_CRYPTO_H

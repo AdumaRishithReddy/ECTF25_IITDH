@@ -160,6 +160,7 @@ int idx = 0;
 uint8_t curr_cw[KEY_LENGTH] = {0};
 
 ecc_key eccKey;
+mp_int mp_r, mp_s;
 
 /**********************************************************
  ******************* UTILITY FUNCTIONS ********************
@@ -440,28 +441,28 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame)
          *  Do any extra decoding here before returning the result to the host. */
 
         // -------------------------------------------------------------------------------------------------
-        word32 derSigLen = 80;
-        byte *derSig = (byte *)malloc(derSigLen);
-        if (derSig == NULL)
-        {
-            print_error("Failed to allocate memory for derSig\n");
-            return -1; // or appropriate error handling
-        }
+        // word32 derSigLen = 80;
+        // byte *derSig = (byte *)malloc(derSigLen);
+        // if (derSig == NULL)
+        // {
+        //     print_error("Failed to allocate memory for derSig\n");
+        //     return -1; // or appropriate error handling
+        // }
 
-        int ver = wc_ecc_rs_raw_to_sig(
-            signature, 32,
-            signature + 32, 32,
-            derSig,
-            &derSigLen);
+        // int ver = wc_ecc_rs_raw_to_sig(
+        //     signature, 32,
+        //     signature + 32, 32,
+        //     derSig,
+        //     &derSigLen);
 
-        if (ver != 0)
-        {
-            char errStr[50];
-            sprintf(errStr, "Failed to convert R||S to DER: %d(%s)\n", ver, wc_GetErrorString(ver));
-            print_debug(errStr);
-            free(derSig); // Don't forget this!
-            return -1;
-        }
+        // if (ver != 0)
+        // {
+        //     char errStr[50];
+        //     sprintf(errStr, "Failed to convert R||S to DER: %d(%s)\n", ver, wc_GetErrorString(ver));
+        //     print_debug(errStr);
+        //     free(derSig); // Don't forget this!
+        //     return -1;
+        // }
 
         // Print hex
         // char dersigHex[200];
@@ -475,16 +476,16 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame)
         // print_debug(dersigHex);
 
         // Use derSig...
-        int ret = hash_firmware_verify(new_frame->data, frame_size, signature, sizeof(signature),&eccKey);
+        int ret = hash_firmware_verify(new_frame->data, frame_size, signature, sizeof(signature),&eccKey,&mp_r,&mp_s);
         if (ret < 0)
         {
             char err[64];
             sprintf(err, "Hash verification failed: %d, Frame: %d, DataLen: %d, SigLen: %d\n",
-                    ret, frame_size, sizeof(new_frame->data), derSigLen);
+                    ret, frame_size, sizeof(new_frame->data), sizeof(signature));
             print_error(err);
         }
 
-        free(derSig);
+        // free(derSig);11:29:16.36911:28:56.247
         // ----------------------------------------------------------------------------------------
 
         // int ret = hash_firmware_verify(new_frame->data, frame_size, signature, sizeof(signature));
@@ -497,7 +498,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame)
         char count[100];
         sprintf(count, "Frame Count: %d,%llu\n", frame_count, timestamp);
         print_debug(count);
-        if (timestamp / 5000000 > decoder_status.subscribed_channels[channel].prev_der || curr_cw == NULL)
+        if (timestamp / 20000000 > decoder_status.subscribed_channels[channel].prev_der || curr_cw == NULL)
         {
             uint8_t sk[16];
             memcpy(sk, decoder_status.subscribed_channels[channel].sk, sizeof(decoder_status.subscribed_channels[channel].sk));
@@ -505,7 +506,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame)
             memcpy(iv, decoder_status.subscribed_channels[channel].iv, sizeof(decoder_status.subscribed_channels[channel].iv));
             uint8_t time_salt[32];
             char ts_str[32];
-            sprintf(ts_str, "%llu", (unsigned long long)(timestamp / 5000000));
+            sprintf(ts_str, "%llu", (unsigned long long)(timestamp / 20000000));
             hash(ts_str, strlen(ts_str), time_salt);
             uint8_t mixed_iv[16];
             for (int i = 0; i < 16; i++)
@@ -517,7 +518,7 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame)
             derive_key(sk, 16, mixed_iv, derived_key);
             memcpy(curr_cw, derived_key, 16);
             print_hex_deb("Global Derived Key", curr_cw, KEY_LENGTH);
-            decoder_status.subscribed_channels[channel].prev_der = timestamp / 5000000;
+            decoder_status.subscribed_channels[channel].prev_der = timestamp / 20000000;
         }
         idx++;
         uint8_t key[16];
@@ -620,6 +621,8 @@ void init()
     }
 
     Initialize_ECC(&eccKey);
+    mp_init(&mp_r);
+    mp_init(&mp_s);
 
     // Initialize the uart peripheral to enable serial I/O
     ret = uart_init();
