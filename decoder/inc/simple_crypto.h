@@ -25,7 +25,10 @@
 #include <wolfssl/wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfssl/wolfcrypt/random.h>
 #include <wolfssl/ssl.h>
+// #include <wolfssl/wolfssl/wolfcrypt/sp.h>
 #include <wolfssl/wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/src/integer.c>
+#include <wolfssl/wolfcrypt/src/sp_cortexm.c>
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/asn.h>

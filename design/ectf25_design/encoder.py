@@ -141,6 +141,7 @@ class Encoder:
         # print(eframe_hash_obj.hexdigest())
         # print(der_signature.hex())
         # print(eframe_signature.hex())
+        # print(encrypted_frame.hex())
         # print(len(eframe_signature))
         # print(len(asn1_signature))
         # print("---------------------------------------------------")

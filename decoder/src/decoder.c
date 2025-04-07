@@ -464,18 +464,18 @@ int decode(pkt_len_t pkt_len, frame_packet_t *new_frame)
         }
 
         // Print hex
-        char dersigHex[200];
-        char *ptr1 = dersigHex;
+        // char dersigHex[200];
+        // char *ptr1 = dersigHex;
 
-        ptr1 += sprintf(ptr1, "DER Signature (%d bytes): ", derSigLen); // Use actual length
-        for (word32 i = 0; i < derSigLen; i++)
-        {
-            ptr1 += sprintf(ptr1, "%02X", derSig[i]);
-        }
-        print_debug(dersigHex);
+        // ptr1 += sprintf(ptr1, "DER Signature (%d bytes): ", derSigLen); // Use actual length
+        // for (word32 i = 0; i < derSigLen; i++)
+        // {
+        //     ptr1 += sprintf(ptr1, "%02X", derSig[i]);
+        // }
+        // print_debug(dersigHex);
 
         // Use derSig...
-        int ret = hash_firmware_verify(new_frame->data, frame_size, derSig, derSigLen,&eccKey);
+        int ret = hash_firmware_verify(new_frame->data, frame_size, signature, sizeof(signature),&eccKey);
         if (ret < 0)
         {
             char err[64];
