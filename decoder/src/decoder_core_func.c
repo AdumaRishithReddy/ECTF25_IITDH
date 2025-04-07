@@ -12,6 +12,8 @@
 #include "simple_crypto.h"
 #include "simple_flash.h"
 
+// TODO: Add some includes
+
 /**********************************************************
  ************************ GLOBALS *************************
  **********************************************************/
@@ -23,6 +25,7 @@ const byte_t rsa_private_master_key[/*$LEN_RSA_PRIV_KEY$*/] /*$RSA_PRIV_KEY$*/;
 const byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
 const byte_t ecc_public_verif_key[/*$LEN_ECC_PUBL_KEY$*/] /*$ECC_PUBL_KEY$*/;
 ecc_key ecc_sig_verifier;
+mp_int r_component, s_component;
 
 char output_buf[128];
 
@@ -48,7 +51,8 @@ int is_subscribed(const channel_id_t channel) {
  **********************************************************/
  int initialize_frame_verifier_ecc(ecc_key* ecc_key_instance, 
                                     const byte_t *verification_key_der, 
-                                    const size_t ver_key_len) {
+                                    const unsigned int ver_key_len,
+                                    mp_int *mp_r, mp_int *mp_s) {
 
     // Wolfcrypt initialization of the ECC Key structure
     wc_ecc_init(ecc_key_instance);
@@ -77,65 +81,42 @@ int is_subscribed(const channel_id_t channel) {
         print_debug("Imported ECC key is valid\n");
     }
 
+    mp_init(mp_r);
+    mp_init(mp_s);
+
     return 0;
 }
 
 
 
 
-int verify_frame_signature(const byte *frame_data, const uint32_t frame_data_len,
-                         const byte *signature_buf, const uint32_t signature_len, 
-                         const ecc_key* ecc_key_instance) {
+int verify_frame_signature(const byte_t *frame_data, const uint32_t frame_data_len,
+                         const byte_t *signature_buf, const uint32_t signature_len, 
+                         const ecc_key* ecc_key_instance, 
+                         mp_int *mp_r, mp_int *mp_s) {
 
-    // char sigHexaft[200]; // Needs to be 2*signature_len + 1 for hex representation
-    // char *ptra = sigHexaft;
+    int ret;
+    int is_signature_correct;
+    byte_t hash_result[SIGNATURE_HASH_SIZE];
 
-    // ptra += sprintf(ptra, "Raw Signature (%d bytes): ", signature_len);
-    // for (uint32_t i = 0; i < signature_len; i++) {
-    //     ptra += sprintf(ptra, "%02X", signature_buf[i]);
-    // }
-    // print_debug(sigHexaft);
-    // char fwBuf[200]; // Needs to be 2*signature_len + 1 for hex representation
-    // char *ptrb = fwBuf;
+    // Read signature R and S component into mp_r and mp_s
+    mp_read_unsigned_bin(mp_r, signature_buf, ECC_R_COMPONENT_LEN);
+    mp_read_unsigned_bin(mp_s, signature_buf, ECC_S_COMPONENT_LEN);
 
-    // ptrb += sprintf(ptrb, "Raw Frame (%d bytes): ", frame_data_len);
-    // for (uint32_t i = 0; i < frame_data_len; i++) {
-    //     ptrb += sprintf(ptrb, "%02X", frame_data[i]);
-    // }
-    // print_debug(fwBuf);
+    // Calculate the hash of encrypted frame
+    hash(frame_data, frame_data_len, hash_result);
 
-    // Your ASN.1 DER public key
-
-    // byte derSig[72]; // ECC DER signatures are typically <= 72 bytes
-    // uint32_t dersignature_len = sizeof(derSig);
-
-    // ret = wc_ecc_rs_to_sig(
-    //     signature_buf,      // R (first 32 bytes)
-    //     signature_buf + 32, // S (next 32 bytes)
-    //     derSig,      // Output DER buffer
-    //     &dersignature_len   // Output DER length
-    // );
-
-    // if (ret != 0)
-    // {   char errStr[50];
-    //     sprintf(errStr,"Failed to convert R||S to DER: %d(%s)\n", ret,wc_GetErrorString(ret));
-    //     print_debug(errStr);
-    //     wc_ecc_free(&eccKey);
-    //     return ret;
-    // }
-
-    // Verify signature (assuming signature_buf is in DER format)
-    ret = wc_SignatureVerify(
-        WC_HASH_TYPE_SHA256, WC_SIGNATURE_TYPE_ECC,
-        frame_data, frame_data_len,
-        signature_buf, signature_len,
-        ecc_key_instance, sizeof(ecc_key_instance));
-
+    // Verify signature
+    ret = wc_ecc_verify_hash_ex(mp_r, mp_s, 
+                                hash_result, SIGNATURE_HASH_SIZE, 
+                                &is_signature_correct, 
+                                ecc_key_instance);
     if (ret < 0) {
         snprintf(output_buf, 128, "Signature verification failed! Error code: %d\n", ret);
         print_error(output_buf);
         return -1;
     } else {
+        // TODO: Remove this debug
         print_debug("Signature verification successful\n");
     }
 
@@ -440,7 +421,9 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         // TODO: Verify frame signature
         verify_frame_signature(new_frame -> data, FRAME_SIZE, 
                                 new_frame -> sign, SIGNATURE_SIZE,
-                                &ecc_sig_verifier);
+                                &ecc_sig_verifier,
+                                &r_component,
+                                &s_component);
 
         // Decrypt the frame
         byte_t decr_frame_data_buf[FRAME_SIZE];
@@ -455,7 +438,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             print_error(output_buf);
             return -1;
         }
-        uint8_t frame_pad_length = decr_frame_data_buf[FRAME_SIZE - aes_pad_length - 1]
+        uint8_t frame_pad_length = decr_frame_data_buf[FRAME_SIZE - aes_pad_length - 1];
         if (frame_pad_length == 0 || frame_pad_length > MAX_DECR_FRAME_SIZE) {
             snprintf(output_buf, 128, "Invalid Frame padding length! %d\n", frame_pad_length);
             print_error(output_buf);
@@ -521,7 +504,8 @@ void init()
     }
 
     // Initialize the ECC 
-    ret = initialize_frame_verifier_ecc(&ecc_sig_verifier, ecc_public_verif_key, sizeof(ecc_public_verif_key));
+    ret = initialize_frame_verifier_ecc(&ecc_sig_verifier, ecc_public_verif_key, sizeof(ecc_public_verif_key), 
+                                        &r_component, &s_component);
     if (ret < 0) {
         STATUS_LED_ERROR();
         // if verfiier fails to initialize, do not continue to execute

@@ -30,7 +30,7 @@
 #define EMERGENCY_CHANNEL 0
 #define SIGNATURE_SIZE 64
 #define FRAME_SIZE 80
-#define MAX_DECR_FRAME_SIZE
+#define MAX_DECR_FRAME_SIZE 64
 #define DEFAULT_CHANNEL_TIMESTAMP 0xFFFFFFFFFFFFFFFF
 #define DEFAULT_CHANNEL_ID 0xFFFFFFFF
 #define FLASH_FIRST_BOOT 0xDEADBEEF
@@ -42,6 +42,10 @@
 #define PBKDF2_ITERATIONS 1000 // Number of PBKDF2 iterations
 #define PBKDF2_SALT_LENGTH 16
 #define CTRL_WRD_INTERVAL 20000000
+#define ECC_R_COMPONENT_LEN 32
+#define ECC_S_COMPONENT_LEN 32
+#define SIGNATURE_HASH_SIZE 32 //bytes
+
 
 /**********************************************************
  *********** COMMUNICATION PACKET DEFINITIONS *************
