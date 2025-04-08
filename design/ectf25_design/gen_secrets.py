@@ -20,7 +20,7 @@ import base64
 from loguru import logger
 
 master_key_type = "AES"
-signature_type = "ECC"
+signature_type = "EdDSA"
 
 def gen_secrets(channels: list[int]) -> bytes:
     """Generate the contents secrets file
@@ -45,6 +45,10 @@ def gen_secrets(channels: list[int]) -> bytes:
     # Create the Frame signing and Verification keys
     if signature_type == "ECC":
         key = ECC.generate(curve='P-256')
+        signing_key = key.export_key(format='PEM')
+        verification_key = key.public_key().export_key(format='PEM')
+    elif signature_type == "EdDSA":
+        key = ECC.generate(curve='ed25519')
         signing_key = key.export_key(format='PEM')
         verification_key = key.public_key().export_key(format='PEM')
     else:

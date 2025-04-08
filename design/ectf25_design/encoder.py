@@ -19,10 +19,11 @@ import hashlib
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from Crypto.PublicKey import ECC
-from Crypto.Hash import SHA256
+from Crypto.Signature import eddsa
+from Crypto.Hash import SHA256, SHA512
 from Crypto.Signature import DSS
 
-signature_type = "ECC"
+signature_type = "EdDSA"
 
 class Encoder:
 
@@ -41,10 +42,14 @@ class Encoder:
         # Load the secrets for use in Encoder.encode
         self.channel_details = secrets["channel_details"]
         self.decoder_details = secrets["decoder_details"]
-
         self.signing_key = ECC.import_key(secrets["signing_key"])
         self.verification_key = ECC.import_key(secrets["verification_key"])
-        self.signing_context = DSS.new(self.signing_key, 'fips-186-3')
+
+        if signature_type == "ECC":
+            self.signing_context = DSS.new(self.signing_key, 'fips-186-3')
+        elif signature_type == "EdDSA":
+            self.signing_context = eddsa.new(self.signing_key, 'rfc8032')
+            self.verifier_context = eddsa.new(self.verification_key, 'rfc8032')
 
         self.frame_count = 0
         self.current_control_word = {channel_no: None for channel_no in self.channel_details.keys()}
@@ -149,17 +154,12 @@ class Encoder:
         encrypted_frame = self.cipher_objects[channel_str].encrypt(padded_frame)
 
         # Hash the encrypted frame and sign
-        eframe_hash_obj = SHA256.new(encrypted_frame)
+        if signature_type == "ECC":
+            eframe_hash_obj = SHA256.new(encrypted_frame)
+        elif signature_type == "EdDSA":
+            eframe_hash_obj = SHA512.new(encrypted_frame)
+
         eframe_signature = self.signing_context.sign(eframe_hash_obj)
-
-        # print(eframe_hash_obj.hexdigest())
-        # print(eframe_signature.hex())
-        # print("---------------------------------------------------")
-
-        # pubkey_der = self.verification_key.export_key(format="DER")
-        # print(", ".join(f"0x{b:02X}" for b in pubkey_der))
-        # print("---------------")
-
 
         # Create the final frame that will be sent
         sgn_enc_frame = eframe_signature + encrypted_frame
