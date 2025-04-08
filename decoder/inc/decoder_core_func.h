@@ -1,6 +1,20 @@
 #ifndef DECODER_CORE_FUNC_H
 #define DECODER_CORE_FUNC_H
 
+#include <wolfssl/wolfssl/options.h>
+#include "wolfssl/wolfssl/wolfcrypt/aes.h"
+#include "wolfssl/wolfssl/wolfcrypt/hash.h"
+#include <wolfssl/wolfssl/wolfcrypt/pwdbased.h>
+#include <wolfssl/wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfssl/wolfcrypt/random.h>
+#include <wolfssl/ssl.h>
+#include <wolfssl/wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/ecc.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/asn.h>
+#include <wolfssl/wolfssl/wolfcrypt/asn_public.h>
+#include <wolfssl/wolfcrypt/coding.h> // For Base64_Decode
+#include <string.h>
 #include "decoder_types.h"
 #include <stddef.h>
 
@@ -15,19 +29,15 @@
  */
 int is_subscribed(const channel_id_t channel);
 
-
-
 /**********************************************************
  ********************* CORE FUNCTIONS *********************
  **********************************************************/
- 
+
 /** @brief Lists out the actively subscribed channels over UART.
  *
  *  @return 0 if successful.
  */
 int list_channels();
-
-
 
 /** @brief Updates the channel subscription for a subset of channels.
  *
@@ -42,8 +52,6 @@ int list_channels();
  */
 int update_subscription(const pkt_len_t pkt_len, const byte_t *update);
 
-
-
 /** @brief Processes a packet containing frame data.
  *
  *  @param pkt_len A pointer to the incoming packet.
@@ -53,13 +61,9 @@ int update_subscription(const pkt_len_t pkt_len, const byte_t *update);
  */
 int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame);
 
-
-
 /** @brief Initializes peripherals for system boot.
  */
 void init();
-
-
 
 /**********************************************************
  ************ CRYPTOGRAPHIC SUPPORT FUNCTIONS *************
@@ -72,14 +76,13 @@ void init();
  *  @param decrypted_buffer A pointer to the buffer where the decrypted data will be stored.
  *  @param decrypted_buffer_size The size of the decrypted buffer to ensure it can hold the decrypted data.
  *
- *  @return 0 if decryption is successful. 
+ *  @return 0 if decryption is successful.
  *          -1 if an error occurs during decryption (e.g., invalid packet length, decryption failure).
  */
-int decrypt_subscription_rsa(const pkt_len_t pkt_len, 
-                              const byte_t *update_packet, 
-                              byte_t *decrypted_buffer, 
-                              const size_t decrypted_buffer_size);
-
+int decrypt_subscription_rsa(const pkt_len_t pkt_len,
+                             const byte_t *update_packet,
+                             byte_t *decrypted_buffer,
+                             const size_t decrypted_buffer_size);
 
 /** @brief Decrypts a subscription update packet using AES.
  *
@@ -87,13 +90,12 @@ int decrypt_subscription_rsa(const pkt_len_t pkt_len,
  *  @param pkt_len The length of the incoming update packet.
  *  @param output_buf A pointer to the buffer where the decrypted data will be stored.
  *
- *  @return 0 if decryption is successful. 
+ *  @return 0 if decryption is successful.
  *          -1 if an error occurs during decryption (e.g., invalid packet length, decryption failure).
  */
-int decrypt_subscription_aes(const byte_t *update_packet, 
-                              const size_t pkt_len, 
-                              byte_t *output_buf);
-
+int decrypt_subscription_aes(const byte_t *update_packet,
+                             const size_t pkt_len,
+                             byte_t *output_buf);
 
 /** @brief Derives a control word from a subscription key and initialization vector.
  *
@@ -104,18 +106,14 @@ int decrypt_subscription_aes(const byte_t *update_packet,
  *
  *  @return void. The derived control word is written directly to the provided buffer.
  */
-int derive_control_word(const byte_t *subscription_key, 
-                          const byte_t *init_vector, 
-                          byte_t *derived_control_word);
-
-
-
-
+int derive_control_word(const byte_t *subscription_key,
+                        const byte_t *init_vector,
+                        byte_t *derived_control_word);
 
 /** @brief Initializes the ECC key for frame signature verification.
  *
  *  @param ecc_key_instance A pointer to the ECC key instance that will be initialized.
- *  @param verification_key_der A pointer to the DER-encoded verification key used for 
+ *  @param verification_key_der A pointer to the DER-encoded verification key used for
  *                              initializing the ECC key.
  *  @param ver_key_len The length of the DER-encoded verification key in bytes.
  *  @param mp_r R component of raw signature
@@ -123,16 +121,10 @@ int derive_control_word(const byte_t *subscription_key,
  *
  *  @return 0 if successful, -1 if error occurs
  */
-int initialize_frame_verifier_ecc(ecc_key* ecc_key_instance, 
-                                    const byte_t *verification_key_der, 
-                                    const unsigned int ver_key_len,
-                                    mp_int *mp_r, mp_int *mp_s);
-
-
-
-
-
-
+int initialize_frame_verifier_ecc(ecc_key *ecc_key_instance,
+                                  const byte_t *verification_key_der,
+                                  const unsigned int ver_key_len,
+                                  mp_int *mp_r, mp_int *mp_s);
 
 /** @brief Verifies the signature of a given frame using an ECC key.
  *
@@ -149,13 +141,9 @@ int initialize_frame_verifier_ecc(ecc_key* ecc_key_instance,
  *          in case of an error during the verification process.
  */
 int verify_frame_signature(const byte_t *frame_data, const uint32_t frame_data_len,
-                         const byte_t *signature_buf, const uint32_t signature_len, 
-                         const ecc_key* ecc_key_instance, 
-                         mp_int *mp_r, mp_int *mp_s);
-
-
-
-
+                           const byte_t *signature_buf, const uint32_t signature_len,
+                           const ecc_key *ecc_key_instance,
+                           mp_int *mp_r, mp_int *mp_s);
 
 /**
  * @brief Decrypts an encrypted frame to produce the raw frame data.
@@ -166,8 +154,8 @@ int verify_frame_signature(const byte_t *frame_data, const uint32_t frame_data_l
  *
  * @return int Returns 0 on success or -1 otherwise.
  */
-int decrypt_frame_data(const byte_t *encr_frame_data, 
-                       const byte_t *subscription_key, 
+int decrypt_frame_data(const byte_t *encr_frame_data,
+                       const byte_t *subscription_key,
                        byte_t *decr_frame_data);
 
 #endif

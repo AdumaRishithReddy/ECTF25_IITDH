@@ -43,7 +43,7 @@ WORKDIR /decoder
 ENTRYPOINT ["bash", "-c", "cp /decoder/src/decoder_core_func.c /out/decoder_core_func.c.bak && \
 python3 /decoder/build_scripts/replace_keys.py /decoder/src/decoder_core_func.c /global.secrets 0xDEADBEEF && \
 make release DECODER_ID=${DECODER_ID}; \
-cp build/max78000.elf build/max78000.bin /out && \
+cp build/max78000.elf build/max78000.bin /out; \
 cp /out/decoder_core_func.c.bak /decoder/src/decoder_core_func.c"]
 
 # Sample run command:
