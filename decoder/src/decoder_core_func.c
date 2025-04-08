@@ -92,10 +92,114 @@ int is_subscribed(const channel_id_t channel) {
 
 
 
-int verify_frame_signature(const byte_t *frame_data, const uint32_t frame_data_len,
+ int initialize_frame_verifier_eddsa(ed25519_key *ed25519_key_instance, 
+                                    const byte_t *verification_key_raw, 
+                                    const unsigned int ver_key_len) {
+
+    int ret;
+
+    // Wolfcrypt initialization of the Ed25519 Key structure
+    ret = wc_ed25519_init(&ed25519_key_instance);
+    if (ret < 0) {
+        wc_ed25519_free(ed25519_key_instance);
+        snprintf(output_buf, 128, "Failed to initialize Ed25519 key. Error code %d\n", ret);
+        print_error(output_buf)
+        return -1;
+    }
+
+    // Parse ed25519 RAW key
+    ret = wc_ed25519_import_public_ex(
+        verification_key_raw, ver_key_len,
+        ed25519_key_instance);
+    if (ret != 0) {
+        wc_ed25519_free(ed25519_key_instance);
+        snprintf(output_buf, 128, "Failed to decoder Ed25519 public key. Error code %d\n", ret);
+        print_error(output_buf)
+        return -1;
+    }
+
+    // Verify key is valid
+    // ret = wc_ed25519_check_key(ed25519_key_instance);
+    // if (ret != 0) {
+    //     wc_ecc_free(ed25519_key_instance);
+    //     snprintf(output_buf, 128, "Imported key is invalid. Error code %d\n", ret);
+    //     print_error(output_buf);
+    //     return -1;
+    // }
+    // else {
+    //     print_debug("Imported Ed25519 key is valid\n");
+    // }
+    return 0;
+}
+
+
+
+
+int verify_frame_signature_ecc(const byte_t *frame_data, const uint32_t frame_data_len,
                          const byte_t *signature_buf, const uint32_t signature_len, 
                          const ecc_key* ecc_key_instance, 
                          mp_int *mp_r, mp_int *mp_s) {
+
+    int ret;
+    int is_signature_correct;
+    byte_t hash_result[SIGNATURE_HASH_SIZE];
+
+    // Read signature R and S component into mp_r and mp_s
+    mp_read_unsigned_bin(mp_r, signature_buf, ECC_R_COMPONENT_LEN);
+    mp_read_unsigned_bin(mp_s, signature_buf, ECC_S_COMPONENT_LEN);
+
+    // Calculate the hash of encrypted frame
+    hash(frame_data, frame_data_len, hash_result);
+
+    // Verify signature
+    ret = wc_ecc_verify_hash_ex(mp_r, mp_s, 
+                                hash_result, SIGNATURE_HASH_SIZE, 
+                                &is_signature_correct, 
+                                ecc_key_instance);
+    if (ret < 0) {
+        snprintf(output_buf, 128, "Signature verification failed! Error code: %d\n", ret);
+        print_error(output_buf);
+        return -1;
+    } else {
+        // TODO: Remove this debug
+        if(is_signature_correct) {
+            print_debug("Signature verification successful\n");
+        } else {
+            print_debug("Bad signature!\n");
+        }
+    }
+
+    return 0;
+}
+
+
+
+
+int verify_frame_signature_eddsa(const byte_t *frame_data, const uint32_t frame_data_len,
+                         const byte_t *signature_buf, const uint32_t signature_len, 
+                         const ed25519_key* ed25519_key_instance) {
+
+    int ret;
+    int is_signature_correct;
+
+    ret = wc_ed25519_verify_msg(
+            signature_buf, signature_len,         /* r/s encoded */
+            frame_data, frame_data_len,           /* message */
+            &is_signature_correct,                /* verification result 1=success */
+            ed25519_key_instance                  /* key context */
+        );
+    if (ret != 0) {
+        snprintf(output_buf, 128, "Signature verification failed! Error code: %d\n", ret);
+        print_error(output_buf);
+        return -1;
+    } else {
+        // TODO: Remove this debug
+        if(is_signature_correct) {
+            print_debug("Signature verification successful\n");
+        } else {
+            print_debug("Bad signature!\n");
+        }
+    }
 
     int ret;
     int is_signature_correct;
@@ -421,7 +525,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
 
 
         // TODO: Verify frame signature
-        verify_frame_signature(new_frame -> data, FRAME_SIZE, 
+        verify_frame_signature_ecc(new_frame -> data, FRAME_SIZE, 
                                 new_frame -> sign, SIGNATURE_SIZE,
                                 &ecc_sig_verifier,
                                 &r_component,

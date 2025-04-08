@@ -126,6 +126,24 @@ int initialize_frame_verifier_ecc(ecc_key *ecc_key_instance,
                                   const unsigned int ver_key_len,
                                   mp_int *mp_r, mp_int *mp_s);
 
+
+
+
+/** @brief Initializes the Ed25519 key for frame signature verification.
+ *
+ *  @param ed25519_key_instance A pointer to the Ed25519 key instance that will be initialized.
+ *  @param verification_key_der A pointer to the RAW verification key used for
+ *                              initializing the Ed25519 key.
+ *  @param ver_key_len The length of the RAW verification key in bytes.
+ *  @return 0 if successful, -1 if error occurs
+ */
+int initialize_frame_verifier_eddsa(ed25519_key *ed25519_key_instance,
+                                  const byte_t *verification_key_der,
+                                  const unsigned int ver_key_len);
+
+
+                        
+
 /** @brief Verifies the signature of a given frame using an ECC key.
  *
  *  @param frame_data A pointer to the data of the frame whose signature is to be verified.
@@ -140,10 +158,32 @@ int initialize_frame_verifier_ecc(ecc_key *ecc_key_instance,
  *  @return 0 if the signature is valid, a negative value if the signature is invalid or
  *          in case of an error during the verification process.
  */
-int verify_frame_signature(const byte_t *frame_data, const uint32_t frame_data_len,
+int verify_frame_signature_ecc(const byte_t *frame_data, const uint32_t frame_data_len,
                            const byte_t *signature_buf, const uint32_t signature_len,
                            const ecc_key *ecc_key_instance,
                            mp_int *mp_r, mp_int *mp_s);
+
+
+
+/** @brief Verifies the signature of a given frame using an Ed25519 key.
+ *
+ *  @param frame_data A pointer to the data of the frame whose signature is to be verified.
+ *  @param frame_data_len The length of the frame data.
+ *  @param signature_buf A pointer to the buffer containing the signature to be verified.
+ *  @param signature_len The length of the signature.
+ *  @param ecc_key_instance A pointer to the Ed25519 key used for verifying the signature. This key must be
+ *                 properly initialized and correspond to the key used to generate the signature.
+ *
+ *  @return 0 if the signature is valid, a negative value if the signature is invalid or
+ *          in case of an error during the verification process.
+ */
+int verify_frame_signature_eddsa(const byte_t *frame_data, const uint32_t frame_data_len,
+                           const byte_t *signature_buf, const uint32_t signature_len,
+                           const ed25519_key *ed25519_key_instance);
+
+
+
+
 
 /**
  * @brief Decrypts an encrypted frame to produce the raw frame data.
