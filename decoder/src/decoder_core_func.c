@@ -29,6 +29,8 @@ const byte_t eddsa_public_verif_key[/*$LEN_EDDSA_PUBL_KEY$*/] /*$EDDSA_PUBL_KEY$
 ecc_key ecc_sig_verifier;
 mp_int r_component, s_component;
 
+ed25519_key eddsa_sig_verifier;
+
 char output_buf[128];
 
 /**********************************************************
@@ -60,7 +62,7 @@ int is_subscribed(const channel_id_t channel) {
     wc_ecc_init(ecc_key_instance);
 
     // Parse ASN.1 DER key
-    uint32_t iteration_idx = 0;
+    unsigned int iteration_idx = 0;
     int ret;
 
     ret = wc_EccPublicKeyDecode(verification_key_der, &iteration_idx, ecc_key_instance, ver_key_len);
@@ -99,22 +101,23 @@ int is_subscribed(const channel_id_t channel) {
     int ret;
 
     // Wolfcrypt initialization of the Ed25519 Key structure
-    ret = wc_ed25519_init(&ed25519_key_instance);
+    ret = wc_ed25519_init(ed25519_key_instance);
     if (ret < 0) {
         wc_ed25519_free(ed25519_key_instance);
         snprintf(output_buf, 128, "Failed to initialize Ed25519 key. Error code %d\n", ret);
-        print_error(output_buf)
+        print_error(output_buf);
         return -1;
     }
 
     // Parse ed25519 RAW key
     ret = wc_ed25519_import_public_ex(
         verification_key_raw, ver_key_len,
-        ed25519_key_instance);
+        ed25519_key_instance,
+        1 /*Trusted or not*/);
     if (ret != 0) {
         wc_ed25519_free(ed25519_key_instance);
         snprintf(output_buf, 128, "Failed to decoder Ed25519 public key. Error code %d\n", ret);
-        print_error(output_buf)
+        print_error(output_buf);
         return -1;
     }
 
@@ -164,8 +167,10 @@ int verify_frame_signature_ecc(const byte_t *frame_data, const uint32_t frame_da
         // TODO: Remove this debug
         if(is_signature_correct) {
             print_debug("Signature verification successful\n");
+            return 0;
         } else {
             print_debug("Bad signature!\n");
+            return -1;
         }
     }
 
@@ -196,37 +201,12 @@ int verify_frame_signature_eddsa(const byte_t *frame_data, const uint32_t frame_
         // TODO: Remove this debug
         if(is_signature_correct) {
             print_debug("Signature verification successful\n");
+            return 0;
         } else {
             print_debug("Bad signature!\n");
+            return -1;
         }
     }
-
-    int ret;
-    int is_signature_correct;
-    byte_t hash_result[SIGNATURE_HASH_SIZE];
-
-    // Read signature R and S component into mp_r and mp_s
-    mp_read_unsigned_bin(mp_r, signature_buf, ECC_R_COMPONENT_LEN);
-    mp_read_unsigned_bin(mp_s, signature_buf, ECC_S_COMPONENT_LEN);
-
-    // Calculate the hash of encrypted frame
-    hash(frame_data, frame_data_len, hash_result);
-
-    // Verify signature
-    ret = wc_ecc_verify_hash_ex(mp_r, mp_s, 
-                                hash_result, SIGNATURE_HASH_SIZE, 
-                                &is_signature_correct, 
-                                ecc_key_instance);
-    if (ret < 0) {
-        snprintf(output_buf, 128, "Signature verification failed! Error code: %d\n", ret);
-        print_error(output_buf);
-        return -1;
-    } else {
-        // TODO: Remove this debug
-        print_debug("Signature verification successful\n");
-    }
-
-    return 0;
 }
 
 
@@ -525,11 +505,14 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
 
 
         // TODO: Verify frame signature
-        verify_frame_signature_ecc(new_frame -> data, FRAME_SIZE, 
+        // verify_frame_signature_ecc(new_frame -> data, FRAME_SIZE, 
+        //                         new_frame -> sign, SIGNATURE_SIZE,
+        //                         &ecc_sig_verifier,
+        //                         &r_component,
+        //                         &s_component);
+        verify_frame_signature_eddsa(new_frame -> data, FRAME_SIZE, 
                                 new_frame -> sign, SIGNATURE_SIZE,
-                                &ecc_sig_verifier,
-                                &r_component,
-                                &s_component);
+                                &eddsa_sig_verifier);
 
         // Decrypt the frame
         byte_t decr_frame_data_buf[FRAME_SIZE];
@@ -609,9 +592,10 @@ void init()
         flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
     }
 
-    // Initialize the ECC 
-    ret = initialize_frame_verifier_ecc(&ecc_sig_verifier, ecc_public_verif_key, sizeof(ecc_public_verif_key), 
-                                        &r_component, &s_component);
+    // Initialize the Frame Verifier
+    // ret = initialize_frame_verifier_ecc(&ecc_sig_verifier, ecc_public_verif_key, sizeof(ecc_public_verif_key), 
+    //                                     &r_component, &s_component);
+    ret = initialize_frame_verifier_eddsa(&eddsa_sig_verifier, eddsa_public_verif_key, sizeof(eddsa_public_verif_key));
     if (ret < 0) {
         STATUS_LED_ERROR();
         // if verfiier fails to initialize, do not continue to execute
