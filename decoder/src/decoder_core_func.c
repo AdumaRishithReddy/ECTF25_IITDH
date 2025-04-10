@@ -110,13 +110,12 @@ int is_subscribed(const channel_id_t channel) {
     }
 
     // Parse ed25519 RAW key
-    ret = wc_ed25519_import_public_ex(
+    ret = wc_ed25519_import_public(
         verification_key_raw, ver_key_len,
-        ed25519_key_instance,
-        1 /*Trusted or not*/);
+        ed25519_key_instance);
     if (ret != 0) {
         wc_ed25519_free(ed25519_key_instance);
-        snprintf(output_buf, 128, "Failed to decoder Ed25519 public key. Error code %d\n", ret);
+        snprintf(output_buf, 128, "Failed to decode Ed25519 public key. Error code %d\n", ret);
         print_error(output_buf);
         return -1;
     }

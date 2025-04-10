@@ -51,7 +51,6 @@ def gen_secrets(channels: list[int]) -> bytes:
         key = ECC.generate(curve='ed25519')
         signing_key = key.export_key(format='PEM')
         verification_key = key.public_key().export_key(format='PEM')
-        context = '12345678'
     else:
         ValueError(f"Signature type {signature_type} undefined")
 
