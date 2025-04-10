@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
         update_c_file(sys.argv[1], rsa_key_der, "/*$LEN_RSA_PRIV_KEY$*/", "/*$RSA_PRIV_KEY$*/")
 
-        # To prevent compiler time error
+        # To prevent compile time error
         update_c_file(sys.argv[1], b'', "/*$LEN_AES_KEY$*/", "/*$PLACEHOLDER$*/")
 
     elif master_key_type == "AES":
