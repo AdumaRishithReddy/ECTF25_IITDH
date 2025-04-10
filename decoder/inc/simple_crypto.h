@@ -58,21 +58,20 @@
 int encrypt_sym(const uint8_t *plaintext, const size_t len, const uint8_t *key, uint8_t *ciphertext);
 
 
-    /** @brief Decrypts ciphertext using a symmetric cipher
-     *
-     * @param ciphertext A pointer to a buffer of length len containing the
-     *           ciphertext to decrypt
-     * @param len The length of the ciphertext to decrypt. Must be a multiple of
-     *           BLOCK_SIZE (16 bytes)
-     * @param key A pointer to a buffer of length KEY_SIZE (16 bytes) containing
-     *           the key to use for decryption
-     * @param plaintext A pointer to a buffer of length len where the resulting
-     *           plaintext will be written to
-     *
-     * @return 0 on success, -1 on bad length, other non-zero for other error
-     */
-    int
-    decrypt_sym(const uint8_t *ciphertext, const size_t len, const uint8_t *key, uint8_t *plaintext);
+/** @brief Decrypts ciphertext using a symmetric cipher
+ *
+ * @param ciphertext A pointer to a buffer of length len containing the
+ *           ciphertext to decrypt
+ * @param len The length of the ciphertext to decrypt. Must be a multiple of
+ *           BLOCK_SIZE (16 bytes)
+ * @param key A pointer to a buffer of length KEY_SIZE (16 bytes) containing
+ *           the key to use for decryption
+ * @param plaintext A pointer to a buffer of length len where the resulting
+ *           plaintext will be written to
+ *
+ * @return 0 on success, -1 on bad length, other non-zero for other error
+ */
+int decrypt_sym(const uint8_t *ciphertext, const size_t len, const uint8_t *key, uint8_t *plaintext);
 
 /** @brief Hashes arbitrary-length data
  *
