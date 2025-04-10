@@ -173,6 +173,8 @@ VPATH += src
 # eCTF Crypto Example
 ifeq ($(CRYPTO_EXAMPLE), 1)
 VPATH += wolfssl/wolfcrypt/src
+
+
 endif
 
 
@@ -264,6 +266,11 @@ PROJ_CFLAGS += -DSINGLE_THREADED
 PROJ_CFLAGS += -DHAVE_PK_CALLBACKS
 PROJ_CFLAGS += -DWOLFSSL_USER_IO
 PROJ_CFLAGS += -DNO_WRITEV -DTIME_T_NOT_64BIT
+PROJ_CFLAGS += -I/usr/local/include
+PROJ_CFLAGS += -I/usr/local/arm-none-eabi/include
+PROJ_LDFLAGS += -L/usr/local/arm-none-eabi/lib
+PROJ_LIBS += wolfssl
+
 endif
 
 ifeq ($(POST_BOOT_ENABLED), 1)

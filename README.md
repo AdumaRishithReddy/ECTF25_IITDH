@@ -138,7 +138,8 @@ directory.
 ```bash
 cd <example_root>/decoder
 docker build -t decoder .
-docker run --rm -v ./build_out:/out -v ./:/decoder -v ./../secrets:/secrets -e DECODER_ID=0xdeadbeef decoder
+docker run --rm -v .\decoder/:/decoder -v .\global.secrets:/global.secrets -v .\deadbeef_build:/out -e DECODER_ID=0xdeadbeef build-decoder
+docker run -it --entrypoint /bin/bash build-decoder
 ```
 
 ### PowerShell:

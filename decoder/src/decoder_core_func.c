@@ -13,7 +13,8 @@
 #include "simple_flash.h"
 
 // TODO: Add some includes
-
+// #define ECC_Ver
+#define EDDSA_Ver
 /**********************************************************
  ************************ GLOBALS *************************
  **********************************************************/
@@ -21,10 +22,23 @@
 // This is used to track decoder subscriptions
 volatile flash_entry_t decoder_status;
 
-const byte_t rsa_private_master_key[/*$LEN_RSA_PRIV_KEY$*/] /*$RSA_PRIV_KEY$*/;
-const byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
+const byte_t rsa_private_master_key[0] /*$RSA_PRIV_KEY$*/;
+const byte_t aes_master_key[16] = {
+0x45, 0xed, 0xf6, 0xbd, 0xdc, 0x72, 0xe7, 0xfa,
+0x72, 0xaf, 0xed, 0x6b, 0x9d, 0x61, 0x80, 0xe1
+};
+#ifdef ECC_Ver
 const byte_t ecc_public_verif_key[/*$LEN_ECC_PUBL_KEY$*/] /*$ECC_PUBL_KEY$*/;
-const byte_t eddsa_public_verif_key[/*$LEN_EDDSA_PUBL_KEY$*/] /*$EDDSA_PUBL_KEY$*/;
+#endif
+#ifdef EDDSA_Ver
+const byte_t eddsa_public_verif_key[32] = {
+0xb3, 0x49, 0x14, 0xb7, 0xe8, 0x02, 0x8f, 0x98,
+0xf0, 0xd1, 0x07, 0xdc, 0x6f, 0x42, 0x91, 0xc7,
+0x23, 0xc5, 0x89, 0xec, 0x99, 0x24, 0xee, 0x52,
+0x95, 0x15, 0xf7, 0x32, 0x4a, 0x1d, 0x3f, 0x61
+};
+#endif
+
 
 ecc_key ecc_sig_verifier;
 mp_int r_component, s_component;
@@ -103,18 +117,18 @@ int is_subscribed(const channel_id_t channel) {
     if (ret < 0) {
         wc_ed25519_free(ed25519_key_instance);
         snprintf(output_buf, 128, "Failed to initialize Ed25519 key. Error code %d\n", ret);
-        print_error(output_buf)
+        print_error(output_buf);
         return -1;
     }
 
     // Parse ed25519 RAW key
     ret = wc_ed25519_import_public_ex(
         verification_key_raw, ver_key_len,
-        ed25519_key_instance);
+        ed25519_key_instance,1);
     if (ret != 0) {
         wc_ed25519_free(ed25519_key_instance);
         snprintf(output_buf, 128, "Failed to decoder Ed25519 public key. Error code %d\n", ret);
-        print_error(output_buf)
+        print_error(output_buf);
         return -1;
     }
 
@@ -201,22 +215,6 @@ int verify_frame_signature_eddsa(const byte_t *frame_data, const uint32_t frame_
         }
     }
 
-    int ret;
-    int is_signature_correct;
-    byte_t hash_result[SIGNATURE_HASH_SIZE];
-
-    // Read signature R and S component into mp_r and mp_s
-    mp_read_unsigned_bin(mp_r, signature_buf, ECC_R_COMPONENT_LEN);
-    mp_read_unsigned_bin(mp_s, signature_buf, ECC_S_COMPONENT_LEN);
-
-    // Calculate the hash of encrypted frame
-    hash(frame_data, frame_data_len, hash_result);
-
-    // Verify signature
-    ret = wc_ecc_verify_hash_ex(mp_r, mp_s, 
-                                hash_result, SIGNATURE_HASH_SIZE, 
-                                &is_signature_correct, 
-                                ecc_key_instance);
     if (ret < 0) {
         snprintf(output_buf, 128, "Signature verification failed! Error code: %d\n", ret);
         print_error(output_buf);
@@ -609,9 +607,14 @@ void init()
         flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
     }
 
-    // Initialize the ECC 
+    // Initialize the ECC
+    #ifdef ECC_Ver  
     ret = initialize_frame_verifier_ecc(&ecc_sig_verifier, ecc_public_verif_key, sizeof(ecc_public_verif_key), 
                                         &r_component, &s_component);
+    #endif
+    #ifdef EDDSA_Ver
+    ret = initialize_frame_verifier_eddsa(&ecc_sig_verifier, eddsa_public_verif_key, sizeof(eddsa_public_verif_key));
+    #endif
     if (ret < 0) {
         STATUS_LED_ERROR();
         // if verfiier fails to initialize, do not continue to execute

@@ -18,21 +18,24 @@
 
 #define WOLFSSL_NO_INT128
 
-#include <wolfssl/wolfssl/options.h>
-#include "wolfssl/wolfssl/wolfcrypt/aes.h"
-#include "wolfssl/wolfssl/wolfcrypt/hash.h"
-#include <wolfssl/wolfssl/wolfcrypt/pwdbased.h>
-#include <wolfssl/wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/wolfssl/wolfcrypt/random.h>
+#include <wolfssl/options.h>
+#include "wolfssl/wolfcrypt/aes.h"
+#include "wolfssl/wolfcrypt/hash.h"
+#include <wolfssl/wolfcrypt/pwdbased.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/ssl.h>
-#include <wolfssl/wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/ed25519.h>
+#include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/asn.h>
-#include <wolfssl/wolfssl/wolfcrypt/asn_public.h>
+#include <wolfssl/wolfcrypt/asn_public.h>
 #include <wolfssl/wolfcrypt/coding.h> // For Base64_Decode
 #include <string.h>
-
+#ifndef HAVE_ED25519_VERIFY
+#error "Please build wolfSSL with the --enable-ed25519_verify option"
+#endif
 /******************************** MACRO DEFINITIONS ********************************/
 #define BLOCK_SIZE AES_BLOCK_SIZE
 #define KEY_SIZE 16
@@ -57,22 +60,20 @@
  */
 int encrypt_sym(const uint8_t *plaintext, const size_t len, const uint8_t *key, uint8_t *ciphertext);
 
-
-    /** @brief Decrypts ciphertext using a symmetric cipher
-     *
-     * @param ciphertext A pointer to a buffer of length len containing the
-     *           ciphertext to decrypt
-     * @param len The length of the ciphertext to decrypt. Must be a multiple of
-     *           BLOCK_SIZE (16 bytes)
-     * @param key A pointer to a buffer of length KEY_SIZE (16 bytes) containing
-     *           the key to use for decryption
-     * @param plaintext A pointer to a buffer of length len where the resulting
-     *           plaintext will be written to
-     *
-     * @return 0 on success, -1 on bad length, other non-zero for other error
-     */
-    int
-    decrypt_sym(const uint8_t *ciphertext, const size_t len, const uint8_t *key, uint8_t *plaintext);
+/** @brief Decrypts ciphertext using a symmetric cipher
+ *
+ * @param ciphertext A pointer to a buffer of length len containing the
+ *           ciphertext to decrypt
+ * @param len The length of the ciphertext to decrypt. Must be a multiple of
+ *           BLOCK_SIZE (16 bytes)
+ * @param key A pointer to a buffer of length KEY_SIZE (16 bytes) containing
+ *           the key to use for decryption
+ * @param plaintext A pointer to a buffer of length len where the resulting
+ *           plaintext will be written to
+ *
+ * @return 0 on success, -1 on bad length, other non-zero for other error
+ */
+int decrypt_sym(const uint8_t *ciphertext, const size_t len, const uint8_t *key, uint8_t *plaintext);
 
 /** @brief Hashes arbitrary-length data
  *
