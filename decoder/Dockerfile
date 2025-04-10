@@ -26,7 +26,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     unzip
 
 # Install MSDK
-RUN apt-get install -y libc6-dev
+RUN apt install -y libnewlib-arm-none-eabi libc6-dev build-essential
 
 # Install python and pip and pycryptodome
 RUN apt-get install -y python3-pip && pip3 install pycryptodome --break-system-packages
@@ -38,13 +38,22 @@ RUN apt-get install -y unzip && \
 
 ENV MAXIM_PATH=/root/msdk-2024_02
 
+WORKDIR /
+
+RUN wget https://github.com/wolfSSL/wolfssl/archive/refs/tags/v5.7.6-stable.zip && \
+    unzip v5.7.6-stable.zip && \
+    mv wolfssl-5.7.6-stable wolfssl && \
+    rm v5.7.6-stable.zip
+
 WORKDIR /decoder
 
-ENTRYPOINT ["bash", "-c", "cp /decoder/src/decoder_core_func.c /out/decoder_core_func.c.bak && \
-python3 /decoder/build_scripts/replace_keys.py /decoder/src/decoder_core_func.c /global.secrets 0xDEADBEEF && \
-make release DECODER_ID=${DECODER_ID}; \
-cp build/max78000.elf build/max78000.bin /out; \
-cp /out/decoder_core_func.c.bak /decoder/src/decoder_core_func.c"]
+ENTRYPOINT ["bash", "-c", "\
+    cd /decoder && \
+    cp /decoder/src/decoder_core_func.c /out/decoder_core_func.c.bak && \
+    python3 /decoder/build_scripts/replace_keys.py /decoder/src/decoder_core_func.c /global.secrets 0xDEADBEEF && \
+    make release DECODER_ID=${DECODER_ID}; \
+    cp /out/decoder_core_func.c.bak /decoder/src/decoder_core_func.c; \
+    cp build/max78000.elf build/max78000.bin /out;"]
 
 # Sample run command:
 # docker run -v ./decoder/:/decoder -v ./global.secrets:/global.secrets:ro -v ./deadbeef_build:/out -e DECODER_ID=0xdeadbeef build-decoder
