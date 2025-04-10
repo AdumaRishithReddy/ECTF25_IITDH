@@ -14,13 +14,8 @@ import argparse
 import json
 import os
 from pathlib import Path
-from Crypto.PublicKey import ECC, RSA
 import base64
-
 from loguru import logger
-
-master_key_type = "AES"
-signature_type = "EdDSA"
 
 def gen_secrets(channels: list[int]) -> bytes:
     """Generate the contents secrets file
@@ -42,32 +37,12 @@ def gen_secrets(channels: list[int]) -> bytes:
         0xB16B00B5, 0xBADC0DE0
     ]
 
-    # Create the Frame signing and Verification keys
-    if signature_type == "ECC":
-        key = ECC.generate(curve='P-256')
-        signing_key = key.export_key(format='PEM')
-        verification_key = key.public_key().export_key(format='PEM')
-    elif signature_type == "EdDSA":
-        key = ECC.generate(curve='ed25519')
-        signing_key = key.export_key(format='PEM')
-        verification_key = key.public_key().export_key(format='PEM')
-        context = '12345678'
-    else:
-        ValueError(f"Signature type {signature_type} undefined")
-
     master_keys_list = {}
 
     # Generate master keys for each decoder
     for dec_id in dec_ids:
-        if master_key_type == "RSA":
-            m_keys = RSA.generate(2048)
-            master_key_decoder = m_keys.export_key().decode('utf-8')
-            master_key_encoder = m_keys.public_key().export_key().decode('utf-8')
-        elif master_key_type == "AES":
-            master_key_decoder = os.urandom(16).hex()
-            master_key_encoder = master_key_decoder
-        else:
-            ValueError(f"Master Key type {master_key_type} undefined")
+        master_key_decoder = os.urandom(16).hex()
+        master_key_encoder = master_key_decoder
 
         master_keys_list[dec_id] = (master_key_decoder, master_key_encoder)
 
@@ -88,8 +63,6 @@ def gen_secrets(channels: list[int]) -> bytes:
             }
             for d_id in dec_ids
         },
-        "signing_key": signing_key,
-        "verification_key": verification_key,
     }
 
     return json.dumps(secrets).encode()

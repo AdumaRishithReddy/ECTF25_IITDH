@@ -18,12 +18,7 @@ import hashlib
 
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
-from Crypto.PublicKey import ECC
-from Crypto.Signature import eddsa
 from Crypto.Hash import SHA256, SHA512
-from Crypto.Signature import DSS
-
-signature_type = "EdDSA"
 
 class Encoder:
 
@@ -42,14 +37,8 @@ class Encoder:
         # Load the secrets for use in Encoder.encode
         self.channel_details = secrets["channel_details"]
         self.decoder_details = secrets["decoder_details"]
-        self.signing_key = ECC.import_key(secrets["signing_key"])
-        self.verification_key = ECC.import_key(secrets["verification_key"])
 
-        if signature_type == "ECC":
-            self.signing_context = DSS.new(self.signing_key, 'fips-186-3')
-        elif signature_type == "EdDSA":
-            self.signing_context = eddsa.new(self.signing_key, 'rfc8032')
-            self.verifier_context = eddsa.new(self.verification_key, 'rfc8032')
+        self.hash_object = SHA256.new()
 
         self.frame_count = 0
         self.current_control_word = {channel_no: None for channel_no in self.channel_details.keys()}
@@ -76,8 +65,13 @@ class Encoder:
 
         # TODO: Remove this
         def print_as_int(data: bytes, label: str):
+            if len(data) % 4 != 0:
+                print("Cannot print as integer: Data length not a multiple of 4")
+                print(data)
+                return
+
             out_str = label
-            for i in range(0, 13, 4):
+            for i in range(0, len(data) - 3, 4):
                 part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
                 out_str += ' ' + str(part_int)
 
@@ -150,22 +144,15 @@ class Encoder:
         # Here, we always know that the padded_frame will be 80B
         padded_frame = pad(partially_padded_frame, AES.block_size)
 
-        # Encrypt the frame
-        encrypted_frame = self.cipher_objects[channel_str].encrypt(padded_frame)
+        # Hash the frame and append it to the start of the frame
+        self.hash_object.update(padded_frame)
+        frame_hash = self.hash_object.digest()
 
-        # Hash the encrypted frame and sign
-        if signature_type == "ECC":
-            eframe_hash_obj = SHA256.new(encrypted_frame)
-        elif signature_type == "EdDSA":
-            eframe_hash_obj = SHA512.new(encrypted_frame)
-
-        eframe_signature = self.signing_context.sign(eframe_hash_obj)
-
-        # Create the final frame that will be sent
-        sgn_enc_frame = eframe_signature + encrypted_frame
+        # Encrypt the frame. Here, the total length of encrypted frame is always 112B
+        encrypted_frame = self.cipher_objects[channel_str].encrypt(frame_hash + padded_frame)
 
         # Return the signed encrypted frame
-        return struct.pack("<IQ", channel, timestamp) + sgn_enc_frame
+        return struct.pack("<IQ", channel, timestamp) + encrypted_frame
 
 def main():
     """A test main to one-shot encode a frame
