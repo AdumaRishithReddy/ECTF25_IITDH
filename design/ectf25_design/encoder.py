@@ -135,21 +135,23 @@ class Encoder:
         #     - 63B frame: Gives a 64B padded frame
         #     - 64B frame: Gives a 80B padded frame!!!
         # Since we expect all encoded frames to be of same size (at the decoder)
-        # we artificially inflate all frame to 65B. The next pad converts
-        # it to an 80B frame.
+        # we artificially inflate all frame to 65B.
         initial_pad_length = 65 - len(frame)
         partially_padded_frame = frame + initial_pad_length.to_bytes() * initial_pad_length
 
-        # Ensure frame is padded to a multiple of 16 bytes (AES block size)
-        # Here, we always know that the padded_frame will be 80B
-        padded_frame = pad(partially_padded_frame, AES.block_size)
-
         # Hash the frame and append it to the start of the frame
-        self.hash_object.update(padded_frame)
+        self.hash_object.update(partially_padded_frame)
         frame_hash = self.hash_object.digest()
 
+        # Ensure frame is padded to a multiple of 16 bytes (AES block size)
+        # Here,
+        #   - we always know that the frame_hash will be 32B
+        #   - we always know that the partially_padded_frame will be 65B
+        # Hence, the AES padding will be 15B
+        padded_frame = pad(frame_hash + partially_padded_frame, AES.block_size)
+
         # Encrypt the frame. Here, the total length of encrypted frame is always 112B
-        encrypted_frame = self.cipher_objects[channel_str].encrypt(frame_hash + padded_frame)
+        encrypted_frame = self.cipher_objects[channel_str].encrypt(padded_frame)
 
         # Return the signed encrypted frame
         return struct.pack("<IQ", channel, timestamp) + encrypted_frame

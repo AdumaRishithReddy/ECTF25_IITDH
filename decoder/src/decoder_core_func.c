@@ -12,7 +12,7 @@
 #include "simple_crypto.h"
 #include "simple_flash.h"
 
-// TODO: Add some includes
+#include <string.h>
 
 /**********************************************************
  ************************ GLOBALS *************************
@@ -23,13 +23,6 @@ volatile flash_entry_t decoder_status;
 
 const byte_t rsa_private_master_key[/*$LEN_RSA_PRIV_KEY$*/] /*$RSA_PRIV_KEY$*/;
 const byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
-const byte_t ecc_public_verif_key[/*$LEN_ECC_PUBL_KEY$*/] /*$ECC_PUBL_KEY$*/;
-const byte_t eddsa_public_verif_key[/*$LEN_EDDSA_PUBL_KEY$*/] /*$EDDSA_PUBL_KEY$*/;
-
-ecc_key ecc_sig_verifier;
-mp_int r_component, s_component;
-
-ed25519_key eddsa_sig_verifier;
 
 char output_buf[128];
 
@@ -53,164 +46,6 @@ int is_subscribed(const channel_id_t channel) {
 /**********************************************************
  ************ CRYPTOGRAPHIC SUPPORT FUNCTIONS *************
  **********************************************************/
- int initialize_frame_verifier_ecc(ecc_key* ecc_key_instance, 
-                                    const byte_t *verification_key_der, 
-                                    const unsigned int ver_key_len,
-                                    mp_int *mp_r, mp_int *mp_s) {
-
-    // Wolfcrypt initialization of the ECC Key structure
-    wc_ecc_init(ecc_key_instance);
-
-    // Parse ASN.1 DER key
-    unsigned int iteration_idx = 0;
-    int ret;
-
-    ret = wc_EccPublicKeyDecode(verification_key_der, &iteration_idx, ecc_key_instance, ver_key_len);
-    if (ret != 0) {
-        wc_ecc_free(ecc_key_instance);
-        snprintf(output_buf, 128, "Failed to decode ASN.1 DER key. Error code %d\n", ret);
-        print_error(output_buf);
-        return -1;
-    }
-
-    // Verify key is valid
-    ret = wc_ecc_check_key(ecc_key_instance);
-    if (ret != 0) {
-        wc_ecc_free(ecc_key_instance);
-        snprintf(output_buf, 128, "Imported key is invalid. Error code %d\n", ret);
-        print_error(output_buf);
-        return -1;
-    }
-    else {
-        print_debug("Imported ECC key is valid\n");
-    }
-
-    mp_init(mp_r);
-    mp_init(mp_s);
-
-    return 0;
-}
-
-
-
-
- int initialize_frame_verifier_eddsa(ed25519_key *ed25519_key_instance, 
-                                    const byte_t *verification_key_raw, 
-                                    const unsigned int ver_key_len) {
-
-    int ret;
-
-    // Wolfcrypt initialization of the Ed25519 Key structure
-    ret = wc_ed25519_init(ed25519_key_instance);
-    if (ret < 0) {
-        wc_ed25519_free(ed25519_key_instance);
-        snprintf(output_buf, 128, "Failed to initialize Ed25519 key. Error code %d\n", ret);
-        print_error(output_buf);
-        return -1;
-    }
-
-    // Parse ed25519 RAW key
-    ret = wc_ed25519_import_public_ex(
-        verification_key_raw, ver_key_len,
-        ed25519_key_instance,
-        1 /*Trusted or not*/);
-    if (ret != 0) {
-        wc_ed25519_free(ed25519_key_instance);
-        snprintf(output_buf, 128, "Failed to decoder Ed25519 public key. Error code %d\n", ret);
-        print_error(output_buf);
-        return -1;
-    }
-
-    // Verify key is valid
-    // ret = wc_ed25519_check_key(ed25519_key_instance);
-    // if (ret != 0) {
-    //     wc_ecc_free(ed25519_key_instance);
-    //     snprintf(output_buf, 128, "Imported key is invalid. Error code %d\n", ret);
-    //     print_error(output_buf);
-    //     return -1;
-    // }
-    // else {
-    //     print_debug("Imported Ed25519 key is valid\n");
-    // }
-    return 0;
-}
-
-
-
-
-int verify_frame_signature_ecc(const byte_t *frame_data, const uint32_t frame_data_len,
-                         const byte_t *signature_buf, const uint32_t signature_len, 
-                         const ecc_key* ecc_key_instance, 
-                         mp_int *mp_r, mp_int *mp_s) {
-
-    int ret;
-    int is_signature_correct;
-    byte_t hash_result[SIGNATURE_HASH_SIZE];
-
-    // Read signature R and S component into mp_r and mp_s
-    mp_read_unsigned_bin(mp_r, signature_buf, ECC_R_COMPONENT_LEN);
-    mp_read_unsigned_bin(mp_s, signature_buf, ECC_S_COMPONENT_LEN);
-
-    // Calculate the hash of encrypted frame
-    hash(frame_data, frame_data_len, hash_result);
-
-    // Verify signature
-    ret = wc_ecc_verify_hash_ex(mp_r, mp_s, 
-                                hash_result, SIGNATURE_HASH_SIZE, 
-                                &is_signature_correct, 
-                                ecc_key_instance);
-    if (ret < 0) {
-        snprintf(output_buf, 128, "Signature verification failed! Error code: %d\n", ret);
-        print_error(output_buf);
-        return -1;
-    } else {
-        // TODO: Remove this debug
-        if(is_signature_correct) {
-            print_debug("Signature verification successful\n");
-            return 0;
-        } else {
-            print_debug("Bad signature!\n");
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-
-
-
-int verify_frame_signature_eddsa(const byte_t *frame_data, const uint32_t frame_data_len,
-                         const byte_t *signature_buf, const uint32_t signature_len, 
-                         const ed25519_key* ed25519_key_instance) {
-
-    int ret;
-    int is_signature_correct;
-
-    ret = wc_ed25519_verify_msg(
-            signature_buf, signature_len,         /* r/s encoded */
-            frame_data, frame_data_len,           /* message */
-            &is_signature_correct,                /* verification result 1=success */
-            ed25519_key_instance                  /* key context */
-        );
-    if (ret != 0) {
-        snprintf(output_buf, 128, "Signature verification failed! Error code: %d\n", ret);
-        print_error(output_buf);
-        return -1;
-    } else {
-        // TODO: Remove this debug
-        if(is_signature_correct) {
-            print_debug("Signature verification successful\n");
-            return 0;
-        } else {
-            print_debug("Bad signature!\n");
-            return -1;
-        }
-    }
-}
-
-
-
 int derive_control_word(const byte_t *sk_buf, 
                         const byte_t *iv_buf, 
                         byte_t *derived_control_word)
@@ -271,7 +106,6 @@ int decrypt_subscription_rsa(const pkt_len_t pkt_len,
 
 
 
-
 // TODO: pkt_len is dangerous TV controlled value
 int decrypt_subscription_aes(const byte_t *encr_update_packet, 
                             const size_t pkt_len, 
@@ -292,14 +126,12 @@ int decrypt_subscription_aes(const byte_t *encr_update_packet,
 
 
 
-
-
 int decrypt_frame_data(const byte_t *encr_frame_data, 
                         const byte_t *control_word, 
                         byte_t *decr_frame_data) {
 
     // Decrypt the frame data
-    int ret = decrypt_sym(encr_frame_data, FRAME_SIZE, control_word, decr_frame_data);
+    int ret = decrypt_sym(encr_frame_data, HASH_AND_FRAME_TOTAL_SIZE, control_word, decr_frame_data);
 
     // Check for errors
     if (ret != 0) {
@@ -343,14 +175,12 @@ int list_channels()
 
 
 
-
-
 int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) {
 
     // Create buffer for writing subscription data
     subscription_update_packet_t decr_update_pkt;
 
-#ifdef USERSA
+#ifdef USE_RSA_FOR_SUBSCRIPTION
     decrypt_subscription_rsa(pkt_len, encr_update_pkt, 
                             &decr_update_pkt, sizeof(subscription_update_packet_t))
 #else
@@ -385,20 +215,6 @@ int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) 
 
             snprintf(output_buf, 128, "Updated channel!  %u\n", decr_update_pkt.channel);
             print_debug(output_buf);
-
-            // TODO: Remove this (prints SK and IV)
-            // print_as_int(decr_update_pkt.subscription_key, 4);
-            // print_as_int(decr_update_pkt.init_vector, 4);
-            
-            // TODO: Remove this (prints CID, STS and ETS)
-            // snprintf(output_buf, 
-            //             128, 
-            //             " ID: %u\n START: %u\n END: %u\n", 
-            //             decr_update_pkt.channel,
-            //             decr_update_pkt.start_timestamp,
-            //             decr_update_pkt.end_timestamp
-            //             );
-            // print_debug(output_buf);
             break;
         }
     }
@@ -420,9 +236,6 @@ int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) 
 
 
 
-
-//TODO: Remove frame count
-uint32_t frame_count = 0;
 int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
     channel_id_t channel_id = new_frame -> channel;
     timestamp_t frame_ts = new_frame -> timestamp;
@@ -455,24 +268,12 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             );
             print_debug(output_buf);
 
-            write_packet(DECODE_MSG, "ILLEGAL", 7);
+            write_packet(DECODE_MSG, "ILLEGAL FRAME!!!", 16);
             return 0;
         }
 
         // Generate a Control Word if it crosses the interval boundary
         if (frame_ts / CTRL_WRD_INTERVAL > decoder_status.subscribed_channels[idx].last_ctrl_wrd_gen_time) {
-            
-            //TODO: Remove this frame count debug print
-            snprintf(
-                output_buf,
-                128,
-                "Frame count since last control word is %u, %u\n", 
-                frame_count,
-                frame_ts
-            );
-            print_debug(output_buf);
-            frame_count = 0;
-            
             byte_t time_digest[32];
             byte_t mixed_iv_buf[INIT_VEC_LENGTH];
             byte_t derived_ctrl_wrd[CTRL_WRD_LENGTH];
@@ -495,57 +296,53 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             derive_control_word(sk_buf, mixed_iv_buf, derived_ctrl_wrd);
             memcpy(decoder_status.subscribed_channels[idx].control_word, derived_ctrl_wrd, CTRL_WRD_LENGTH);
 
-            // TODO: Remove this (Prints CW on new CW)
-            // print_as_int(derived_ctrl_wrd, 4);
-            print_as_int(mixed_iv_buf, 4);
-
             // Update the last timestamp when you generated a Control Word
             decoder_status.subscribed_channels[idx].last_ctrl_wrd_gen_time = frame_ts / CTRL_WRD_INTERVAL;
         }
 
-
-        // TODO: Verify frame signature
-        // verify_frame_signature_ecc(new_frame -> data, FRAME_SIZE, 
-        //                         new_frame -> sign, SIGNATURE_SIZE,
-        //                         &ecc_sig_verifier,
-        //                         &r_component,
-        //                         &s_component);
-        verify_frame_signature_eddsa(new_frame -> data, FRAME_SIZE, 
-                                new_frame -> sign, SIGNATURE_SIZE,
-                                &eddsa_sig_verifier);
-
         // Decrypt the frame
-        byte_t decr_frame_data_buf[FRAME_SIZE];
-        if (decrypt_frame_data(new_frame -> data, decoder_status.subscribed_channels[idx].control_word, decr_frame_data_buf) != 0) {
+        frame_packet_t decrypted_frame;
+        if (decrypt_frame_data(new_frame -> frame_hash, decoder_status.subscribed_channels[idx].control_word, decrypted_frame.frame_hash) != 0) {
             return -1;
         }
 
-        // Calculate padding
-        uint8_t aes_pad_length = decr_frame_data_buf[FRAME_SIZE - 1];
+        // Calculate AES padding
+        uint8_t aes_pad_length = decrypted_frame.aes_pad[14];
+
+        print_as_int(decrypted_frame.aes_pad, 3);
+
         if (aes_pad_length != 15) {
             snprintf(output_buf, 128, "Invalid AES padding length! %d\n", aes_pad_length);
             print_error(output_buf);
             return -1;
         }
-        uint8_t frame_pad_length = decr_frame_data_buf[FRAME_SIZE - aes_pad_length - 1];
-        if (frame_pad_length == 0 || frame_pad_length > MAX_DECR_FRAME_SIZE) {
+
+        // Compute hash of partially padded frame
+        byte_t computed_hash[FRAME_HASH_SIZE];
+        hash(decrypted_frame.data, PARTIAL_PAD_FRAME_DATA_SIZE, computed_hash);
+
+        if (strncmp(decrypted_frame.frame_hash, computed_hash, FRAME_HASH_SIZE) != 0) {
+            snprintf(output_buf, 128, "Frame hashes do not match!\n");
+            print_error(output_buf);
+            return -1;
+        }
+
+
+        uint8_t frame_pad_length = decrypted_frame.data[PARTIAL_PAD_FRAME_DATA_SIZE - 1];
+        if (frame_pad_length == 0 || frame_pad_length > MAX_RAW_FRAME_SIZE) {
             snprintf(output_buf, 128, "Invalid Frame padding length! %d\n", frame_pad_length);
             print_error(output_buf);
             return -1;
         }
 
         // Write the decrypted frame data to UART
-        frame_count++;
-        write_packet(DECODE_MSG, decr_frame_data_buf, FRAME_SIZE - aes_pad_length - frame_pad_length);
+        write_packet(DECODE_MSG, decrypted_frame.data, PARTIAL_PAD_FRAME_DATA_SIZE - frame_pad_length);
 
         return 0;
     }
 
     return -1;
 }
-
-
-
 
 
 
@@ -590,16 +387,6 @@ void init()
 
         flash_simple_erase_page(FLASH_STATUS_ADDR);
         flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
-    }
-
-    // Initialize the Frame Verifier
-    // ret = initialize_frame_verifier_ecc(&ecc_sig_verifier, ecc_public_verif_key, sizeof(ecc_public_verif_key), 
-    //                                     &r_component, &s_component);
-    ret = initialize_frame_verifier_eddsa(&eddsa_sig_verifier, eddsa_public_verif_key, sizeof(eddsa_public_verif_key));
-    if (ret < 0) {
-        STATUS_LED_ERROR();
-        // if verfiier fails to initialize, do not continue to execute
-        while (1);
     }
 
     // Initialize the uart peripheral to enable serial I/O

@@ -3,7 +3,7 @@ import json
 from Crypto.PublicKey import RSA, ECC
 
 master_key_type = "AES"
-signature_type = "EdDSA"
+signature_type = None
 
 def bytes_to_c_array(byte_data):
     hex_list = [f"0x{byte:02x}" for byte in byte_data]
