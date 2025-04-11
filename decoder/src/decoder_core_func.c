@@ -186,11 +186,12 @@ int verify_frame_signature_eddsa(const byte_t *frame_data, const uint32_t frame_
     int ret;
     int is_signature_correct;
 
-    ret = wc_ed25519_verify_msg(
+    ret = wc_ed25519ph_verify_msg(
             signature_buf, signature_len,         /* r/s encoded */
             frame_data, frame_data_len,           /* message */
             &is_signature_correct,                /* verification result 1=success */
-            ed25519_key_instance                  /* key context */
+            ed25519_key_instance,                 /* key */
+            "00000000", 8                         /* context and context len */
         );
     if (ret != 0) {
         snprintf(output_buf, 128, "Signature verification failed! Error code: %d\n", ret);

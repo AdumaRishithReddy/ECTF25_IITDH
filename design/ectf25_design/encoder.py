@@ -48,7 +48,7 @@ class Encoder:
         if signature_type == "ECC":
             self.signing_context = DSS.new(self.signing_key, 'fips-186-3')
         elif signature_type == "EdDSA":
-            self.signing_context = eddsa.new(self.signing_key, 'rfc8032')
+            self.signing_context = eddsa.new(self.signing_key, 'rfc8032', context=bytes('00000000', encoding='utf-8'))
             self.verifier_context = eddsa.new(self.verification_key, 'rfc8032')
 
         self.frame_count = 0
