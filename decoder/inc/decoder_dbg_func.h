@@ -19,4 +19,6 @@
  */
 void print_as_int(const byte_t *inp_buf, const size_t num_of_int);
 
+void print_hex_deb(const char *label, uint8_t *data, size_t len);
+
 #endif

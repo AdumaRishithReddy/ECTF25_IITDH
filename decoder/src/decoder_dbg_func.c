@@ -23,3 +23,16 @@ void print_as_int(const byte_t *inp_buf, const size_t num_of_int) {
     }
     print_debug(out_buf);
 }
+void print_hex_deb(const char *label, uint8_t *data, size_t len)
+{
+    char buffer[len * 2 + 50]; // Buffer to store formatted output
+    char *ptr = buffer;
+
+    ptr += sprintf(ptr, "%s: ", label);
+    for (size_t i = 0; i < len; i++)
+    {
+        ptr += sprintf(ptr, "%02X", data[i]);
+    }
+
+    print_debug(buffer); // Print the formatted hex output
+}

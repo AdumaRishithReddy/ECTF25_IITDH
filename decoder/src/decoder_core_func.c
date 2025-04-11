@@ -519,7 +519,6 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         if (decrypt_frame_data(new_frame -> data, decoder_status.subscribed_channels[idx].control_word, decr_frame_data_buf) != 0) {
             return -1;
         }
-
         // Calculate padding
         uint8_t aes_pad_length = decr_frame_data_buf[FRAME_SIZE - 1];
         if (aes_pad_length != 15) {
