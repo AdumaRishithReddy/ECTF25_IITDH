@@ -8,6 +8,7 @@ global.json
 deadbeef_c1.sub
 ignore/
 decoder_core_func.c.bak
+*.bak
 
 # ---------------------------
 
