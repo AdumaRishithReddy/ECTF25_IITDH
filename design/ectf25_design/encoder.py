@@ -99,7 +99,10 @@ class Encoder:
         cw_interval = 5000000
         pbkdf2_iterations = 500
 
-        if self.current_control_word[channel_str] is None or timestamp // cw_interval > self.prev_ts[channel_str]:
+        if (channel != 0 and
+        (self.current_control_word[channel_str] is None or
+        timestamp // cw_interval > self.prev_ts[channel_str])
+        ):
 
             # Calculating Salt, IV and MixedIV
             timestamp_mod_bytes = str(timestamp // cw_interval).encode()
@@ -144,14 +147,18 @@ class Encoder:
         # we artificially inflate all frame to 65B. The next pad converts
         # it to an 80B frame.
         initial_pad_length = 65 - len(frame)
-        partially_padded_frame = frame + initial_pad_length.to_bytes() * initial_pad_length
+        inner_padded_frame = frame + initial_pad_length.to_bytes() * initial_pad_length
 
         # Ensure frame is padded to a multiple of 16 bytes (AES block size)
-        # Here, we always know that the padded_frame will be 80B
-        padded_frame = pad(partially_padded_frame, AES.block_size)
+        # Here, we always know that the outer_padded_frame will be 80B
+        outer_padded_frame = pad(inner_padded_frame, AES.block_size)
 
-        # Encrypt the frame
-        encrypted_frame = self.cipher_objects[channel_str].encrypt(padded_frame)
+        if channel != 0:
+            # Encrypt the frame
+            encrypted_frame = self.cipher_objects[channel_str].encrypt(outer_padded_frame)
+        else:
+            # Dont encrypt the frame for channel zero
+            encrypted_frame = outer_padded_frame
 
         # Hash the encrypted frame and sign
         if signature_type == "ECC":

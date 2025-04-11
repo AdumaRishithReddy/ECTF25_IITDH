@@ -42,8 +42,6 @@
 #define PBKDF2_ITERATIONS 500 // Number of PBKDF2 iterations
 #define PBKDF2_SALT_LENGTH 16
 #define CTRL_WRD_INTERVAL 5000000
-#define ECC_R_COMPONENT_LEN 32
-#define ECC_S_COMPONENT_LEN 32
 #define SIGNATURE_HASH_SIZE 32 //bytes
 
 
