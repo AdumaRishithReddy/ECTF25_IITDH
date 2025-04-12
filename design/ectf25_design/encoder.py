@@ -82,25 +82,31 @@ class Encoder:
         pad_length = 64 - len(frame)
         padded_frame = frame + os.urandom(pad_length)
 
-        # Create a new AES object for this frame
+        # Retreive channel key
+        channel_key_hex_str = self.channel_details[channel_str]["channel_key"]
+        channel_key = bytes.fromhex(channel_key_hex_str)
+
+        # Retrieve channel init vector of 16B
+        channel_iv_hex_str =  self.channel_details[channel_str]["channel_iv"]
+        channel_iv_bytes = bytes.fromhex(channel_iv_hex_str)
+        channel_iv = int.from_bytes(channel_iv_bytes, byteorder='big')
+
+        # Create a hash of string of timestamp
+        timestamp_str = str(timestamp)
+        timestamp_hash_bytes = hashlib.sha256(timestamp_str.encode('utf-8')).digest()[:16]
+        timestamp_hash = int.from_bytes(timestamp_hash_bytes, byteorder='big')
+
+        # Create an initial value (CTR mode) of 16B
+        # Here, initial value is name mixed_init_vector as
+        # on wolfCrypt, the IV is used as the initial value
+        mixed_init_vector = timestamp_hash ^ channel_iv
+
+        # Create a new counter
         #
-        # Counter:
+        # Counter Structure:
         # +------+--------------+-------+
         # |prefix| counter value|postfix|
         # +------+--------------+-------+
-
-        # An init vector of 16B
-        channel_iv_hex_str =  self.channel_details[channel_str]["channel_iv"]
-        channel_iv_bytes = bytes.fromhex(channel_iv_hex_str)
-        channel_iv = int.from_bytes(channel_iv_bytes)
-
-        # A timestamp hash
-        timestamp_bytes = timestamp.to_bytes(8, byteorder='big')
-        timestamp_hash = hashlib.sha256(timestamp_bytes).digest()[:16]
-
-        # Create an initial value of 16B
-        # On wolfCrypt, the IV is used as the initial counter value
-        mixed_init_vector = int.from_bytes(timestamp_hash) ^ channel_iv
 
         new_counter = Counter.new(nbits = 128,
                               prefix = b'',
@@ -109,9 +115,7 @@ class Encoder:
                               little_endian = True,
                               )
 
-        channel_key_hex_str = self.channel_details[channel_str]["channel_key"]
-        channel_key = bytes.fromhex(channel_key_hex_str)
-
+        # Create an AES Cipher object
         cipher_object = AES.new(channel_key,
                             AES.MODE_CTR,
                             counter = new_counter)

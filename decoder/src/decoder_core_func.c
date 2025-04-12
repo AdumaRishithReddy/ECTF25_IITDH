@@ -21,12 +21,14 @@
 // This is used to track decoder subscriptions
 volatile flash_entry_t decoder_status;
 
-timestamp_t last_frame_timestamp_emergency;
 
-ed25519_key eddsa_sig_verifier;
-const byte_t rsa_private_master_key[/*$LEN_RSA_PRIV_KEY$*/] /*$RSA_PRIV_KEY$*/;
+const byte_t rsa_private_master_key[/*$RSA_PRIV_KEY_LEN$*/] /*$RSA_PRIV_KEY$*/;
+
 const byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
-const byte_t eddsa_public_verif_key[/*$LEN_EDDSA_PUBL_KEY$*/] /*$EDDSA_PUBL_KEY$*/;
+
+const byte_t emergency_channel_key[/*$EMERGENCY_CHANNEL_KEY_LEN$*/] /*$EMERGENCY_CHANNEL_KEY$*/;
+
+const byte_t emergency_channel_iv[/*$EMERGENCY_CHANNEL_IV_LEN$*/] /*$EMERGENCY_CHANNEL_IV$*/;
 
 char output_buf_core[128];
 
@@ -67,7 +69,7 @@ int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) 
     subscription_update_packet_t decr_update_pkt;
 
 #ifdef USERSA
-    decrypt_subscription_rsa(pkt_len, encr_update_pkt, 
+    decrypt_subscription_rsa(pkt_len, encr_update_pkt,
                             rsa_private_master_key, sizeof(rsa_private_master_key), &decr_update_pkt, sizeof(subscription_update_packet_t))
 #else
     decrypt_subscription_aes(encr_update_pkt, pkt_len, aes_master_key, (byte_t *)&decr_update_pkt);
@@ -104,8 +106,25 @@ int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) 
             decoder_status.subscribed_channels[i].active = true;
             decoder_status.subscribed_channels[i].start_timestamp = decr_update_pkt.start_timestamp;
             decoder_status.subscribed_channels[i].end_timestamp = decr_update_pkt.end_timestamp;
-            memcpy(decoder_status.subscribed_channels[i].subscription_key, decr_update_pkt.subscription_key, SUBS_KEY_LENGTH);
+            memcpy(decoder_status.subscribed_channels[i].channel_key, decr_update_pkt.channel_key, CHNL_KEY_LENGTH);
             memcpy(decoder_status.subscribed_channels[i].init_vector, decr_update_pkt.init_vector, INIT_VEC_LENGTH);
+            
+            int ret = wc_AesSetKey(&(decoder_status.subscribed_channels[i].frame_decryptor),
+                                decoder_status.subscribed_channels[i].channel_key, 
+                                CHNL_KEY_LENGTH, NULL, 
+                                AES_ENCRYPTION);
+                                
+            if(ret != 0) {
+                snprintf(output_buf_core,
+                        128,
+                        "Failed to update subscription. AES Context cannot be set. Channel %u\n", 
+                        decr_update_pkt.channel
+                        );
+
+                print_debug(output_buf_core);
+                erase_subscription(decr_update_pkt.channel);
+                return -1;
+            }
 
             snprintf(output_buf_core, 128, "Updated channel!  %u\n", decr_update_pkt.channel);
             print_debug(output_buf_core);
@@ -130,74 +149,43 @@ int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) 
 
 
 
-void erase_subscription(uint8_t idx) {
-    decoder_status.subscribed_channels[idx].start_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
-    decoder_status.subscribed_channels[idx].end_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
-    decoder_status.subscribed_channels[idx].active = false;
+int erase_subscription(channel_id_t channel_id) {
 
-    memset(decoder_status.subscribed_channels[idx].subscription_key, 0, SUBS_KEY_LENGTH);
-    memset(decoder_status.subscribed_channels[idx].init_vector, 0, INIT_VEC_LENGTH);
-    memset(decoder_status.subscribed_channels[idx].control_word, 0, INIT_VEC_LENGTH);
-    decoder_status.subscribed_channels[idx].last_ctrl_wrd_gen_time = 0;
-
-    // Do not set last frame timestamp to zero as we have to have monotonically increasing timestamps
-    // decoder_status.subscribed_channels[idx].last_frame_timestamp = 0;
-
-    flash_simple_erase_page(FLASH_STATUS_ADDR);
-    flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
-}
-
-
-
-int decode_emergency_channel(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
-    channel_id_t channel_id = new_frame -> channel;
-    timestamp_t frame_ts = new_frame -> timestamp;
-    int ret;
-
-
-    // Accept only monotonically increasing timestamps on frames
-    if (frame_ts <= last_frame_timestamp_emergency) {
+    // Check if channel is subscribed to
+    if (!is_subscribed(channel_id, &decoder_status)) {
         snprintf(
             output_buf_core,
             128,
-            "Out of order frame with timestamp %u. Last seen timestamp is %u on channel %u, Ignoring frame...\n", 
-            frame_ts, 
-            last_frame_timestamp_emergency,
-            EMERGENCY_CHANNEL
-        );
-        print_debug(output_buf_core);
-        return -1;
-    } else {
-        last_frame_timestamp_emergency = frame_ts;
-    }
-
-    // Verify signature of emergency channel
-    ret = verify_frame_signature_eddsa(new_frame -> data, FRAME_SIZE, 
-                                    new_frame -> sign, SIGNATURE_SIZE,
-                                    &eddsa_sig_verifier);
-    if(ret != 0) {
-        return -1;
-    }
-
-    // Calculate padding
-    uint8_t outer_pad_length = new_frame -> data[FRAME_SIZE - 1];
-    if (outer_pad_length != 15) {
-        snprintf(output_buf_core, 128, "Invalid AES padding length! %d\n", outer_pad_length);
-        print_debug(output_buf_core);
-        return -1;
-    }
-    uint8_t inner_pad_length = new_frame -> data[FRAME_SIZE - outer_pad_length - 1];
-    if (inner_pad_length == 0 || inner_pad_length > MAX_DECR_FRAME_SIZE) {
-        snprintf(output_buf_core, 128, "Invalid Frame padding length! %d\n", inner_pad_length);
+            "Trying to erase an unsubscribed channel. Channel %u: Ignoring frame...\n", channel_id);
         print_debug(output_buf_core);
         return -1;
     }
 
-    // Write the decrypted frame data to UART
-    write_packet(DECODE_MSG, new_frame -> data, FRAME_SIZE - outer_pad_length - inner_pad_length);
+    // Erase channel if found (Do not erase ID)
+    for(uint8_t idx = 0; idx < MAX_CHANNEL_COUNT; idx++) {
+
+        if(decoder_status.subscribed_channels[idx].id != channel_id) {
+            continue;
+        }
+
+        decoder_status.subscribed_channels[idx].start_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
+        decoder_status.subscribed_channels[idx].end_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
+        decoder_status.subscribed_channels[idx].active = false;
+
+        memset(decoder_status.subscribed_channels[idx].channel_key, 0, CHNL_KEY_LENGTH);
+        memset(decoder_status.subscribed_channels[idx].init_vector, 0, INIT_VEC_LENGTH);
+        wc_AesFree(&(decoder_status.subscribed_channels[idx].frame_decryptor));
+
+        // Do not set last frame timestamp to zero as we only decode monotonically increasing timestamps
+
+        flash_simple_erase_page(FLASH_STATUS_ADDR);
+        flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
+    }
 
     return 0;
 }
+
+
 
 
 
@@ -216,31 +204,34 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         return -1;
     }
 
-
-    if (channel_id == EMERGENCY_CHANNEL) {
-        int ret = decode_emergency_channel(pkt_len, new_frame);
-        return ret;
-    }
-
     for(int idx = 0; idx < MAX_CHANNEL_COUNT; idx++) {
+
+        // ---------------------------------------------------
+        // Checks for ensuring no pesky frames are decoded
+        // ---------------------------------------------------
+
         // Go ahead only if the channel id is found in our subscription
         if(decoder_status.subscribed_channels[idx].id != channel_id) {
             continue;
         }
 
         // If frame timestamp crosses end timestamp, discard it, erase the subscription
-        if (frame_ts > decoder_status.subscribed_channels[idx].end_timestamp) {
+        if (channel_id != EMERGENCY_CHANNEL &&
+            frame_ts > decoder_status.subscribed_channels[idx].end_timestamp
+        ) {
             snprintf(
                 output_buf_core,
                 128,
                 "Erasing subscription. Channel %u: Ignoring frame...\n", channel_id);
             print_debug(output_buf_core);
-            erase_subscription(idx);
+            erase_subscription(channel_id);
             return -1;
         }
 
         // If frame timestamp is smaller than subscription timestamp, ignore it
-        if (frame_ts < decoder_status.subscribed_channels[idx].start_timestamp) {
+        if (channel_id != EMERGENCY_CHANNEL &&
+            frame_ts < decoder_status.subscribed_channels[idx].start_timestamp
+        ) {
             snprintf(
                 output_buf_core,
                 128,
@@ -250,12 +241,13 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         }
 
         // Accept only monotonically increasing timestamps on frames
+        // We have to make sure this is true for Channel 0 as well
         if (frame_ts <= decoder_status.subscribed_channels[idx].last_frame_timestamp) {
             snprintf(
                 output_buf_core,
                 128,
-                "Out of order frame with timestamp %u. Last seen timestamp is %u on channel %u, Ignoring frame...\n", 
-                frame_ts, 
+                "Out of order frame with timestamp %u. Last seen timestamp is %u on channel %u, Ignoring frame...\n",
+                frame_ts,
                 decoder_status.subscribed_channels[idx].last_frame_timestamp,
                 channel_id
             );
@@ -265,69 +257,76 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             decoder_status.subscribed_channels[idx].last_frame_timestamp = frame_ts;
         }
 
-        // Generate a Control Word if it crosses the interval boundary
-        if (frame_ts / CTRL_WRD_INTERVAL > decoder_status.subscribed_channels[idx].last_ctrl_wrd_gen_time) {
-            
-            byte_t time_digest[32];
-            byte_t mixed_iv_buf[INIT_VEC_LENGTH];
-            byte_t derived_ctrl_wrd[CTRL_WRD_LENGTH];
-            char ts_str[32];
 
-            // Retrieve the SK and IV
-            const byte_t *sk_buf = decoder_status.subscribed_channels[idx].subscription_key;
-            const byte_t *iv_buf = decoder_status.subscribed_channels[idx].init_vector;
+        // ---------------------------------------------------
+        // Decryption Process starts here
+        // ---------------------------------------------------
 
-            // Create a digest of timestamp string to mix with the IV
-            snprintf(ts_str, 32, "%llu", (unsigned long long)(frame_ts / CTRL_WRD_INTERVAL));
-            hash(ts_str, strlen(ts_str), time_digest);
+        // Retrieve the SK and IV
+        const byte_t *sk_buf = decoder_status.subscribed_channels[idx].channel_key;
+        const byte_t *iv_buf = decoder_status.subscribed_channels[idx].init_vector;
 
-            // Mix the IV with the digest
-            for (int i = 0; i < INIT_VEC_LENGTH; i++) {
-                mixed_iv_buf[i] = iv_buf[i] ^ time_digest[i];
-            }
+        byte_t time_digest[32];
+        byte_t mixed_iv_buf[INIT_VEC_LENGTH];
+        char ts_str[32];
 
-            // Derive and write control word to Decoder Status structure
-            derive_control_word(sk_buf, mixed_iv_buf, derived_ctrl_wrd);
-            memcpy(decoder_status.subscribed_channels[idx].control_word, derived_ctrl_wrd, CTRL_WRD_LENGTH);
+        // Create a digest of timestamp string to mix with the IV
+        snprintf(ts_str, 32, "%llu", (unsigned long long)frame_ts);
+        hash(ts_str, strlen(ts_str), time_digest);
 
-            // Update the last timestamp when you generated a Control Word
-            decoder_status.subscribed_channels[idx].last_ctrl_wrd_gen_time = frame_ts / CTRL_WRD_INTERVAL;
-
-            flash_simple_erase_page(FLASH_STATUS_ADDR);
-            flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
+        // Mix the IV with the digest
+        for (int i = 0; i < INIT_VEC_LENGTH; i++) {
+            mixed_iv_buf[i] = iv_buf[i] ^ time_digest[i];
         }
 
-        // Verify signature before decryption
-        ret = verify_frame_signature_eddsa(new_frame -> data, FRAME_SIZE, 
-                                new_frame -> sign, SIGNATURE_SIZE,
-                                &eddsa_sig_verifier);
+        // Set the AES struct IV to Mixed IV
+        Aes *frame_decryptor = &(decoder_status.subscribed_channels[idx].frame_decryptor);
+        ret = wc_AesSetIV(frame_decryptor, mixed_iv_buf);
+        if(ret != 0) {
+            snprintf(
+                output_buf_core,
+                128,
+                "Unable to set Init Vector: Channel %u: Ignoring frame...\n", channel_id);
+            print_debug(output_buf_core);
+            return -1;
+        }
+
+        // Decrypt the frame (and also the hash, not visible here)
+        frame_packet_t decrypted_frame;
+        ret = decrypt_frame_data(frame_decryptor, new_frame -> data, decrypted_frame.data);
         if(ret != 0) {
             return -1;
         }
 
-        // Decrypt the frame
-        byte_t decr_frame_data_buf[FRAME_SIZE];
-        ret = decrypt_frame_data(new_frame -> data, decoder_status.subscribed_channels[idx].control_word, decr_frame_data_buf);
+        // ---------------------------------------------------
+        // Verify and finalize frame to display
+        // ---------------------------------------------------
+
+        // Verify hash is correct
+        byte_t computed_hash[FRAME_HASH_SIZE];
+        hash(decrypted_frame.data, MAX_DECR_FRAME_SIZE, computed_hash);
+        ret = strncmp(decrypted_frame.hash, computed_hash, FRAME_HASH_SIZE);
         if(ret != 0) {
+            snprintf(
+                output_buf_core,
+                128,
+                "Frame hash does not match: Channel %u, Ignoring frame...\n",
+                channel_id
+            );
+            print_debug(output_buf_core);
             return -1;
         }
 
         // Calculate padding
-        uint8_t outer_pad_length = decr_frame_data_buf[FRAME_SIZE - 1];
-        if (outer_pad_length != 15) {
-            snprintf(output_buf_core, 128, "Invalid AES padding length! %d\n", outer_pad_length);
-            print_debug(output_buf_core);
-            return -1;
-        }
-        uint8_t inner_pad_length = decr_frame_data_buf[FRAME_SIZE - outer_pad_length - 1];
-        if (inner_pad_length == 0 || inner_pad_length > MAX_DECR_FRAME_SIZE) {
-            snprintf(output_buf_core, 128, "Invalid Frame padding length! %d\n", inner_pad_length);
+        uint8_t pad_length = new_frame -> pad_length;
+        if (pad_length >= MAX_DECR_FRAME_SIZE) {
+            snprintf(output_buf_core, 128, "Invalid AES padding length! %d\n", pad_length);
             print_debug(output_buf_core);
             return -1;
         }
 
         // Write the decrypted frame data to UART
-        write_packet(DECODE_MSG, decr_frame_data_buf, FRAME_SIZE - outer_pad_length - inner_pad_length);
+        write_packet(DECODE_MSG, decrypted_frame.data, MAX_DECR_FRAME_SIZE);
 
         return 0;
     }
@@ -359,21 +358,27 @@ void init()
 
         channel_status_t subscription[MAX_CHANNEL_COUNT];
 
-        for (int i = 0; i < MAX_CHANNEL_COUNT; i++){
+        // Write in data for emergency channel
+        subscription[0].id = EMERGENCY_CHANNEL;
+        subscription[0].start_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
+        subscription[0].end_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
+        subscription[0].active = true;
 
+        memcpy(subscription[0].channel_key, emergency_channel_key, CHNL_KEY_LENGTH);
+        memcpy(subscription[0].init_vector, emergency_channel_iv, INIT_VEC_LENGTH);
+        subscription[0].last_frame_timestamp = 0;
+
+        // Write in data for all other channels
+        for (int i = 1; i < MAX_CHANNEL_COUNT; i++){
             subscription[i].id = DEFAULT_CHANNEL_ID;
             subscription[i].start_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
             subscription[i].end_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
             subscription[i].active = false;
 
-            memset(subscription[i].subscription_key, 0, SUBS_KEY_LENGTH);
+            memset(subscription[i].channel_key, 0, CHNL_KEY_LENGTH);
             memset(subscription[i].init_vector, 0, INIT_VEC_LENGTH);
-            memset(subscription[i].control_word, 0, INIT_VEC_LENGTH);
-            subscription[i].last_ctrl_wrd_gen_time = 0;
             subscription[i].last_frame_timestamp = 0;
         }
-
-        last_frame_timestamp_emergency = 0;
 
         // Write the starting channel subscriptions into flash.
         memcpy(decoder_status.subscribed_channels, subscription, MAX_CHANNEL_COUNT * sizeof(channel_status_t));
@@ -382,9 +387,11 @@ void init()
         flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
     }
 
-    // Initialize the frame signature verifier
-    ret = initialize_frame_verifier_eddsa(&eddsa_sig_verifier, eddsa_public_verif_key, sizeof(eddsa_public_verif_key));
+    // Initialize the uart peripheral to enable serial I/O
+    ret = uart_init();
     if (ret < 0) {
         STATUS_LED_ERROR();
-        // if verfiier fails to initialize, do not continue to execute
+        // if uart fails to initialize, do not continue to execute
         while (1);
+    }
+}

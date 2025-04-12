@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "wolfssl/wolfssl/wolfcrypt/aes.h"
+#include "wolfssl/wolfssl/wolfcrypt/hash.h"
+
 /**********************************************************
  ********************* STATE MACROS ***********************
  **********************************************************/
@@ -28,21 +31,19 @@
 
 #define MAX_CHANNEL_COUNT 8
 #define EMERGENCY_CHANNEL 0
-#define SIGNATURE_SIZE 64
-#define FRAME_SIZE 80
-#define MAX_DECR_FRAME_SIZE 64
 #define DEFAULT_CHANNEL_TIMESTAMP 0xFFFFFFFFFFFFFFFF
 #define DEFAULT_CHANNEL_ID 0xFFFFFFFF
-#define FLASH_FIRST_BOOT 0xDEADBEEF
-// This is a canary value so we can confirm whether this decoder has booted before
 
-#define SUBS_KEY_LENGTH 16
+// This is a canary value so we can confirm whether this decoder has booted before
+#define FLASH_FIRST_BOOT 0xDEADBEEF
+
+// Frame specific constants
+#define MAX_DECR_FRAME_SIZE 64
+#define FRAME_HASH_SIZE 16
+
+// Subscription specific constants
+#define CHNL_KEY_LENGTH 16
 #define INIT_VEC_LENGTH 16
-#define CTRL_WRD_LENGTH 16
-#define PBKDF2_ITERATIONS 500 // Number of PBKDF2 iterations
-#define PBKDF2_SALT_LENGTH 16
-#define CTRL_WRD_INTERVAL 5000000
-#define SIGNATURE_HASH_SIZE 32 //bytes
 
 
 /**********************************************************
@@ -56,8 +57,9 @@ typedef struct
 {
     channel_id_t channel;
     timestamp_t timestamp;
-    byte_t sign[SIGNATURE_SIZE];
-    byte_t data[FRAME_SIZE];
+    byte_t pad_length;
+    byte_t data[MAX_DECR_FRAME_SIZE];
+    byte_t hash[FRAME_HASH_SIZE];
 } frame_packet_t;
 
 typedef struct
@@ -66,7 +68,7 @@ typedef struct
     timestamp_t start_timestamp;
     timestamp_t end_timestamp;
     channel_id_t channel;
-    byte_t subscription_key[SUBS_KEY_LENGTH];
+    byte_t channel_key[CHNL_KEY_LENGTH];
     byte_t init_vector[INIT_VEC_LENGTH];
 } subscription_update_packet_t;
 
@@ -94,11 +96,10 @@ typedef struct
     channel_id_t id;
     timestamp_t start_timestamp;
     timestamp_t end_timestamp;
-    byte_t subscription_key[SUBS_KEY_LENGTH];
+    byte_t channel_key[CHNL_KEY_LENGTH];
     byte_t init_vector[INIT_VEC_LENGTH];
-    byte_t control_word[CTRL_WRD_LENGTH];
-    timestamp_t last_ctrl_wrd_gen_time;
     timestamp_t last_frame_timestamp;
+    Aes frame_decryptor;
 } channel_status_t;
 
 typedef struct

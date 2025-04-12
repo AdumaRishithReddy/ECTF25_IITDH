@@ -27,6 +27,14 @@ int list_channels();
 int update_subscription(const pkt_len_t pkt_len, const byte_t *update);
 
 
+/** @brief Erases a subscription at index I in the decoder status struct.
+ *
+ *  @param channel_id The channel id whose data to erase
+ *
+ */
+int erase_subscription(channel_id_t channel_id);
+
+
 /** @brief Processes a packet containing frame data of emergency channel.
  *
  *  @param pkt_len A pointer to the incoming packet.

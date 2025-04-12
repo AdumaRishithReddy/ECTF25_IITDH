@@ -29,6 +29,7 @@
 #include "host_messaging.h"
 
 #define MAX_BLOCK_SIZE 1024
+#define BLOCK_SIZE 16
 
 /******************************** FUNCTION PROTOTYPES ********************************/
 int encrypt_sym(const uint8_t *plaintext, 

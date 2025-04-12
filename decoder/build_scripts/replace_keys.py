@@ -60,25 +60,22 @@ if __name__ == "__main__":
         aes_key_der = bytes.fromhex(aes_master_key)
         update_c_file(sys.argv[1], aes_key_der, "/*$LEN_AES_KEY$*/", "/*$AES_KEY$*/")
 
-        # To prevent compiler time error
+        # To prevent compile time error
         update_c_file(sys.argv[1], b'', "/*$LEN_RSA_PRIV_KEY$*/", "/*$PLACEHOLDER$*/")
 
     else:
         ValueError(f"Master Key type {master_key_type} undefined")
 
     # ----------------------------------
-    # Verif. Key placeholder replacement
+    # Emergency Channel Key replacement
     # ----------------------------------
-    if signature_type == "ECC":
-        ecc_verification_key_pem_str = secrets["verification_key"]
-        ecc_verification_key = ECC.import_key(ecc_verification_key_pem_str)
-        ecc_key_der = ecc_verification_key.export_key(format='DER')
+    # const byte_t emergency_channel_key[CHNL_KEY_LENGTH] /*$EMERGENCY_CHANNEL_KEY$*/
+    # const byte_t emergency_channel_iv[INIT_VEC_LENGTH] /*$EMERGENCY_CHANNEL_IV$*/
 
-        update_c_file(sys.argv[1], ecc_key_der, "/*$LEN_ECC_PUBL_KEY$*/", "/*$ECC_PUBL_KEY$*/")
+    channel_key_hex_str = secrets["channel_details"]["0"]["channel_key"]
+    channel_key_bytes = bytes.fromhex(channel_key_hex_str)
+    update_c_file(sys.argv[1], channel_key_bytes, "/*$EMERGENCY_CHANNEL_KEY_LEN$*/", "/*$EMERGENCY_CHANNEL_KEY$*/")
 
-    elif signature_type == "EdDSA":
-        eddsa_verification_key_pem_str = secrets["verification_key"]
-        eddsa_verification_key = ECC.import_key(eddsa_verification_key_pem_str)
-        eddsa_key_raw = eddsa_verification_key.export_key(format='raw')
-
-        update_c_file(sys.argv[1], eddsa_key_raw, "/*$LEN_EDDSA_PUBL_KEY$*/", "/*$EDDSA_PUBL_KEY$*/")
+    channel_iv_hex_str = secrets["channel_details"]["0"]["channel_iv"]
+    channel_iv_bytes = bytes.fromhex(channel_iv_hex_str)
+    update_c_file(sys.argv[1], channel_iv_bytes, "/*$EMERGENCY_CHANNEL_IV_LEN$*/", "/*$EMERGENCY_CHANNEL_IV$*/")
