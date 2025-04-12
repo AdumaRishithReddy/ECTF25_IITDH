@@ -114,6 +114,10 @@ int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) 
             memcpy(decoder_status.subscribed_channels[i].channel_key, decr_update_pkt.channel_key, CHNL_KEY_LENGTH);
             memcpy(decoder_status.subscribed_channels[i].init_vector, decr_update_pkt.init_vector, INIT_VEC_LENGTH);
             
+            wc_AesInit(&(decoder_status.subscribed_channels[i].frame_decryptor), 
+                        NULL, 
+                        INVALID_DEVID);
+                        
             int ret = wc_AesSetKey(&(decoder_status.subscribed_channels[i].frame_decryptor),
                                 decoder_status.subscribed_channels[i].channel_key, 
                                 CHNL_KEY_LENGTH, NULL, 
