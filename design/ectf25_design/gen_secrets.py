@@ -20,7 +20,6 @@ import base64
 from loguru import logger
 
 master_key_type = "AES"
-signature_type = "EdDSA"
 
 def gen_secrets(channels: list[int]) -> bytes:
     """Generate the contents secrets file
@@ -41,18 +40,6 @@ def gen_secrets(channels: list[int]) -> bytes:
         0xC0FFEE00, 0xBAADF00D, 0xF00DBABE, 0xDEADFA11,
         0xB16B00B5, 0xBADC0DE0
     ]
-
-    # Create the Frame signing and Verification keys
-    if signature_type == "ECC":
-        key = ECC.generate(curve='P-256')
-        signing_key = key.export_key(format='PEM')
-        verification_key = key.public_key().export_key(format='PEM')
-    elif signature_type == "EdDSA":
-        key = ECC.generate(curve='ed25519')
-        signing_key = key.export_key(format='PEM')
-        verification_key = key.public_key().export_key(format='PEM')
-    else:
-        ValueError(f"Signature type {signature_type} undefined")
 
     master_keys_list = {}
 
@@ -75,7 +62,7 @@ def gen_secrets(channels: list[int]) -> bytes:
             cnum: {
                 "channel_no": cnum,
                 "channel_key": os.urandom(16).hex(),
-                "init_vector": os.urandom(16).hex(),
+                "channel_iv": os.urandom(16).hex(),
             }
             for cnum in channels + [0]
         },
@@ -87,8 +74,6 @@ def gen_secrets(channels: list[int]) -> bytes:
             }
             for d_id in dec_ids
         },
-        "signing_key": signing_key,
-        "verification_key": verification_key,
     }
 
     return json.dumps(secrets).encode()

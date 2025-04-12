@@ -1,5 +1,5 @@
 #include "decoder_core_func.h"
-
+#
 #include "decoder_support_func.h"
 #include "decoder_dbg_func.h"
 #include "decoder_types.h"
@@ -139,6 +139,9 @@ void erase_subscription(uint8_t idx) {
     memset(decoder_status.subscribed_channels[idx].init_vector, 0, INIT_VEC_LENGTH);
     memset(decoder_status.subscribed_channels[idx].control_word, 0, INIT_VEC_LENGTH);
     decoder_status.subscribed_channels[idx].last_ctrl_wrd_gen_time = 0;
+
+    // Do not set last frame timestamp to zero as we have to have monotonically increasing timestamps
+    // decoder_status.subscribed_channels[idx].last_frame_timestamp = 0;
 
     flash_simple_erase_page(FLASH_STATUS_ADDR);
     flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
@@ -385,13 +388,3 @@ void init()
         STATUS_LED_ERROR();
         // if verfiier fails to initialize, do not continue to execute
         while (1);
-    }
-
-    // Initialize the uart peripheral to enable serial I/O
-    ret = uart_init();
-    if (ret < 0) {
-        STATUS_LED_ERROR();
-        // if uart fails to initialize, do not continue to execute
-        while (1);
-    }
-}

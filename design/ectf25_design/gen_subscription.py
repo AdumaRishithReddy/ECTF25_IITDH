@@ -59,7 +59,7 @@ def load_keys(secrets, device_id_str, channel_str):
         raise ValueError("No key found for channel")
 
     # Load the IV
-    iv_hex_str = channel_details[channel_str]["init_vector"]
+    iv_hex_str = channel_details[channel_str]["channel_iv"]
     if iv_hex_str is None:
         raise ValueError("No IV found for channel")
 

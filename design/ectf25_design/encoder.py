@@ -17,13 +17,20 @@ import json
 import hashlib
 
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
-from Crypto.PublicKey import ECC
-from Crypto.Signature import eddsa
-from Crypto.Hash import SHA256, SHA512
-from Crypto.Signature import DSS
+from Crypto.Util import Counter
 
-signature_type = "EdDSA"
+# Debug function used to check keys
+# Prints keys as 4 byte integers
+# (only works if key size is multiple of 4)
+def print_as_int(data: bytes, label: str):
+    out_str = label
+    for i in range(0, len(data) - 3, 4):
+        part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
+        out_str += ' ' + str(part_int)
+
+    print(out_str)
+
+
 
 class Encoder:
 
@@ -42,19 +49,9 @@ class Encoder:
         # Load the secrets for use in Encoder.encode
         self.channel_details = secrets["channel_details"]
         self.decoder_details = secrets["decoder_details"]
-        self.signing_key = ECC.import_key(secrets["signing_key"])
-        self.verification_key = ECC.import_key(secrets["verification_key"])
 
-        if signature_type == "ECC":
-            self.signing_context = DSS.new(self.signing_key, 'fips-186-3')
-        elif signature_type == "EdDSA":
-            self.signing_context = eddsa.new(self.signing_key, 'rfc8032', context=bytes('00000000', encoding='utf-8'))
-            self.verifier_context = eddsa.new(self.verification_key, 'rfc8032')
-
+        # Keep track of frame count for debugging
         self.frame_count = 0
-        self.current_control_word = {channel_no: None for channel_no in self.channel_details.keys()}
-        self.prev_ts = {channel_no: 9999 for channel_no in self.channel_details.keys()}
-        self.cipher_objects = {channel_no: None for channel_no in self.channel_details.keys()}
 
 
     def encode(self, channel: int, frame: bytes, timestamp: int) -> bytes:
@@ -73,16 +70,6 @@ class Encoder:
 
         :returns: The encoded frame, which will be sent to the Decoder
         """
-
-        # TODO: Remove this
-        def print_as_int(data: bytes, label: str):
-            out_str = label
-            for i in range(0, 13, 4):
-                part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
-                out_str += ' ' + str(part_int)
-
-            print(out_str)
-
         if len(frame) > 64:
             raise ValueError(f"Frame length ({len(frame)}) must be less than or equal to 64")
 
@@ -90,89 +77,53 @@ class Encoder:
         channel_str = str(channel)
 
 
-        # -----------------------------------------------------------------
-        # A new control word is generated
-        #   1. at the start of the channel stream or
-        #   2. when an interval boundary is crossed (here, 10M units)
-        # -----------------------------------------------------------------
+        # Since we expect all encoded frames to be of same size (at the decoder)
+        # we artificially inflate all frames to 64B.
+        pad_length = 64 - len(frame)
+        padded_frame = frame + os.urandom(pad_length)
 
-        cw_interval = 5000000
-        pbkdf2_iterations = 500
+        # Create a new AES object for this frame
+        #
+        # Counter:
+        # +------+--------------+-------+
+        # |prefix| counter value|postfix|
+        # +------+--------------+-------+
 
-        if (channel != 0 and
-        (self.current_control_word[channel_str] is None or
-        timestamp // cw_interval > self.prev_ts[channel_str])
-        ):
+        # An init vector of 16B
+        channel_iv_hex_str =  self.channel_details[channel_str]["channel_iv"]
+        channel_iv_bytes = bytes.fromhex(channel_iv_hex_str)
+        channel_iv = int.from_bytes(channel_iv_bytes)
 
-            # Calculating Salt, IV and MixedIV
-            timestamp_mod_bytes = str(timestamp // cw_interval).encode()
-            time_digest = hashlib.sha256(timestamp_mod_bytes).digest()[:16]
+        # A timestamp hash
+        timestamp_bytes = timestamp.to_bytes(8, byteorder='big')
+        timestamp_hash = hashlib.sha256(timestamp_bytes).digest()[:16]
 
-            iv_hex = self.channel_details[channel_str]["init_vector"]
-            iv = bytes.fromhex(iv_hex)
+        # Create an initial value of 16B
+        # On wolfCrypt, the IV is used as the initial counter value
+        mixed_init_vector = int.from_bytes(timestamp_hash) ^ channel_iv
 
-            mixed_iv = bytes(a ^ b for a, b in zip(time_digest, iv))
+        new_counter = Counter.new(nbits = 128,
+                              prefix = b'',
+                              initial_value = mixed_init_vector,
+                              suffix = b'',
+                              little_endian = True,
+                              )
 
-            print_as_int(mixed_iv, "Mixed IV: ")
+        channel_key_hex_str = self.channel_details[channel_str]["channel_key"]
+        channel_key = bytes.fromhex(channel_key_hex_str)
 
-            # Retreiving the channel key
-            channel_key_hex = self.channel_details[channel_str]["channel_key"]
-            channel_key = bytes.fromhex(channel_key_hex)
+        cipher_object = AES.new(channel_key,
+                            AES.MODE_CTR,
+                            counter = new_counter)
 
-            # Generating a new control word
-            self.current_control_word[channel_str] = hashlib.pbkdf2_hmac('sha256',
-                                                                     channel_key,
-                                                                     mixed_iv,
-                                                                     pbkdf2_iterations,
-                                                                     dklen=16)
+        # Encrypt the frame, get the tag
+        encrypted_frame = cipher_object.encrypt(padded_frame)
 
-            # Keeping track of when the last control word was generated
-            self.prev_ts[channel_str] = timestamp // cw_interval
-
-            # Creating new AES cipher object
-            self.cipher_objects[channel_str] = AES.new(self.current_control_word[channel_str],
-                                                   AES.MODE_ECB)
-
-            print_as_int(self.current_control_word[channel_str], 'CW: ')
-
+        # Debug frame count
         self.frame_count+=1
 
-        # Padding to the neart AES block:
-        #     - 61B frame: Gives a 64B padded frame
-        #     - 62B frame: Gives a 64B padded frame
-        #     - 62B frame: Gives a 64B padded frame
-        #     - 63B frame: Gives a 64B padded frame
-        #     - 64B frame: Gives a 80B padded frame!!!
-        # Since we expect all encoded frames to be of same size (at the decoder)
-        # we artificially inflate all frame to 65B. The next pad converts
-        # it to an 80B frame.
-        initial_pad_length = 65 - len(frame)
-        inner_padded_frame = frame + initial_pad_length.to_bytes() * initial_pad_length
-
-        # Ensure frame is padded to a multiple of 16 bytes (AES block size)
-        # Here, we always know that the outer_padded_frame will be 80B
-        outer_padded_frame = pad(inner_padded_frame, AES.block_size)
-
-        if channel != 0:
-            # Encrypt the frame
-            encrypted_frame = self.cipher_objects[channel_str].encrypt(outer_padded_frame)
-        else:
-            # Dont encrypt the frame for channel zero
-            encrypted_frame = outer_padded_frame
-
-        # Hash the encrypted frame and sign
-        if signature_type == "ECC":
-            eframe_hash_obj = SHA256.new(encrypted_frame)
-        elif signature_type == "EdDSA":
-            eframe_hash_obj = SHA512.new(encrypted_frame)
-
-        eframe_signature = self.signing_context.sign(eframe_hash_obj)
-
-        # Create the final frame that will be sent
-        sgn_enc_frame = eframe_signature + encrypted_frame
-
         # Return the signed encrypted frame
-        return struct.pack("<IQ", channel, timestamp) + sgn_enc_frame
+        return struct.pack("<IQ", channel, timestamp) + bytes([pad_length]) + encrypted_frame
 
 def main():
     """A test main to one-shot encode a frame
