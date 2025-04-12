@@ -122,8 +122,6 @@ class Encoder:
         # Debug frame count
         self.frame_count += 1
 
-        input()
-
         # Return the signed encrypted frame
         return struct.pack("<IQ", channel, timestamp) + bytes([pad_length]) + encrypted_frame
 
