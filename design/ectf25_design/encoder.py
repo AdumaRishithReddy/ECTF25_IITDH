@@ -82,6 +82,10 @@ class Encoder:
         pad_length = 64 - len(frame)
         padded_frame = frame + os.urandom(pad_length)
 
+        # Append a 32B hash to the frame
+        frame_hash = hashlib.sha256(padded_frame).digest()
+        frame_with_hash = padded_frame + frame_hash
+
         # Retreive channel key
         channel_key_hex_str = self.channel_details[channel_str]["channel_key"]
         channel_key = bytes.fromhex(channel_key_hex_str)
@@ -102,27 +106,23 @@ class Encoder:
         # Create a new counter
         #
         # Counter Structure:
-        # +------+--------------+-------+
-        # |prefix| counter value|postfix|
-        # +------+--------------+-------+
-
-        new_counter = Counter.new(nbits = 128,
-                              prefix = b'',
-                              initial_value = int.from_bytes(mixed_init_vector, byteorder='big'),
-                              suffix = b'',
-                              little_endian = True,
-                              )
+        # +-------+---------------+
+        # | nonce | counter value |
+        # +-------+---------------+
 
         # Create an AES Cipher object
         cipher_object = AES.new(channel_key,
                             AES.MODE_CTR,
-                            counter = new_counter)
+                            nonce = mixed_init_vector[0:15],
+                            initial_value = mixed_init_vector[15:16])
 
-        # Encrypt the frame, get the tag
-        encrypted_frame = cipher_object.encrypt(padded_frame)
+        # Encrypt the frame with the hash
+        encrypted_frame = cipher_object.encrypt(frame_with_hash)
 
         # Debug frame count
-        self.frame_count+=1
+        self.frame_count += 1
+
+        input()
 
         # Return the signed encrypted frame
         return struct.pack("<IQ", channel, timestamp) + bytes([pad_length]) + encrypted_frame

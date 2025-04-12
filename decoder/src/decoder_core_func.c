@@ -299,10 +299,15 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             print_debug(output_buf_core);
             return -1;
         }
-
+        
+        
         // Decrypt the frame (and also the hash, not visible here)
         frame_packet_t decrypted_frame;
-        ret = decrypt_frame_data(frame_decryptor, new_frame -> data, decrypted_frame.data);
+        ret = decrypt_frame_data(frame_decryptor, new_frame -> data, decrypted_frame.data,  MAX_DECR_FRAME_SIZE);
+        if(ret != 0) {
+            return -1;
+        }
+        ret = decrypt_frame_data(frame_decryptor, new_frame -> hash, decrypted_frame.hash,  FRAME_HASH_SIZE);
         if(ret != 0) {
             return -1;
         }
@@ -314,6 +319,12 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         // Verify hash is correct
         byte_t computed_hash[FRAME_HASH_SIZE];
         hash(decrypted_frame.data, MAX_DECR_FRAME_SIZE, computed_hash);
+
+        // print_as_int("AES_STRUCT_REG: ", 16, frame_decryptor -> reg, INIT_VEC_LENGTH / 4);
+        // print_as_int("DEC_FRAME_DATA: ", 16, decrypted_frame.data, MAX_DECR_FRAME_SIZE / 4);
+        // print_as_int("DEC_FRAME_HASH: ", 16, decrypted_frame.hash, FRAME_HASH_SIZE / 4);
+        // print_as_int("COMPUTED__HASH: ", 16, computed_hash, FRAME_HASH_SIZE / 4);
+
         ret = strncmp(decrypted_frame.hash, computed_hash, FRAME_HASH_SIZE);
         if(ret != 0) {
             snprintf(

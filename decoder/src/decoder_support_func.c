@@ -93,9 +93,10 @@ int decrypt_subscription_aes(const byte_t *encr_update_packet,
 
 int decrypt_frame_data(Aes * frame_decryptor,
                         const byte_t *encr_frame_data, 
-                        byte_t *decr_frame_data) {
+                        byte_t *decr_frame_data,
+                        const size_t data_len) {
 
     // Decrypt the frame data
-    wc_AesCtrEncrypt(frame_decryptor, decr_frame_data, encr_frame_data, MAX_DECR_FRAME_SIZE + FRAME_HASH_SIZE);
+    wc_AesCtrEncrypt(frame_decryptor, decr_frame_data, encr_frame_data, data_len);
     return 0;
 }

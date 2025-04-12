@@ -39,7 +39,7 @@
 
 // Frame specific constants
 #define MAX_DECR_FRAME_SIZE 64
-#define FRAME_HASH_SIZE 16
+#define FRAME_HASH_SIZE 32
 
 // Subscription specific constants
 #define CHNL_KEY_LENGTH 16

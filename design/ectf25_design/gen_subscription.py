@@ -27,6 +27,15 @@ from loguru import logger
 master_key_type = "AES"
 verify_before_write = False
 
+# TODO: Remove this
+def print_as_int(label: str, data: bytes):
+    out_str = label
+    for i in range(0, 13, 4):
+        part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
+        out_str += ' ' + str(part_int)
+
+    print(out_str)
+
 def load_keys(secrets, device_id_str, channel_str):
     """Load the master key, channel key, and initialization vector (IV) from the secrets.
 
@@ -77,22 +86,9 @@ def create_subscription_struct(device_id, start, end, channel, channel_key_hex_s
     :return: Packed binary data representing the subscription.
     """
 
-
-    # TODO: Remove this
-    def print_as_int(data: bytes, label: str):
-        out_str = label
-        for i in range(0, 13, 4):
-            part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
-            out_str += ' ' + str(part_int)
-
-        print(out_str)
-
     # Pack and return subscription.bin data
     channel_key_bytes = bytes.fromhex(channel_key_hex_str)
     init_vector_bytes = bytes.fromhex(iv_hex_str)
-
-    print_as_int(channel_key_bytes, 'SK: ')
-    print_as_int(init_vector_bytes, 'IV: ')
 
     return struct.pack(f"<IQQI16s16s",
                        device_id,

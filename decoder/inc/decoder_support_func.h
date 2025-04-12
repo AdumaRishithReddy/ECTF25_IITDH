@@ -79,7 +79,8 @@ int decrypt_subscription_aes(const byte_t *update_packet,
  */
 int decrypt_frame_data(Aes * frame_decryptor,
                         const byte_t *encr_frame_data, 
-                        byte_t *decr_frame_data);
+                        byte_t *decr_frame_data,
+                        const size_t data_len);
 
 
 #endif
