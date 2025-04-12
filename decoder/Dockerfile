@@ -26,7 +26,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     unzip
 
 # Install MSDK
-RUN apt install -y libnewlib-arm-none-eabi libc6-dev build-essential
+RUN apt install -y libc6-dev
 
 # Install python and pip and pycryptodome
 RUN apt-get install -y python3-pip && pip3 install pycryptodome --break-system-packages
@@ -45,14 +45,20 @@ RUN wget https://github.com/wolfSSL/wolfssl/archive/refs/tags/v5.7.6-stable.zip 
     mv wolfssl-5.7.6-stable wolfssl && \
     rm v5.7.6-stable.zip
 
+WORKDIR /wolfssl
+
+RUN bash ./autogen.sh
+
 WORKDIR /decoder
 
 ENTRYPOINT ["bash", "-c", "\
     cd /decoder && \
+    cp -r /wolfssl . && \
     cp /decoder/src/decoder_core_func.c /out/decoder_core_func.c.bak && \
     python3 /decoder/build_scripts/replace_keys.py /decoder/src/decoder_core_func.c /global.secrets 0xDEADBEEF && \
     make release DECODER_ID=${DECODER_ID}; \
     cp /out/decoder_core_func.c.bak /decoder/src/decoder_core_func.c; \
+    rm -r wolfssl; \
     cp build/max78000.elf build/max78000.bin /out;"]
 
 # Sample run command:

@@ -10,23 +10,13 @@
  *
  * @copyright Copyright (c) 2025 The MITRE Corporation
  */
-#define WOLFSSL_USE_OPTIONS_H
-// #if CRYPTO_EXAMPLE
 #ifndef ECTF_CRYPTO_H
 #define ECTF_CRYPTO_H
-#endif
 
-#define WOLFSSL_NO_INT128
-
-#include <wolfssl/wolfssl/options.h>
 #include "wolfssl/wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfssl/wolfcrypt/hash.h"
-#include <wolfssl/wolfssl/wolfcrypt/pwdbased.h>
-#include <wolfssl/wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/wolfssl/wolfcrypt/random.h>
 #include <wolfssl/ssl.h>
 #include <wolfssl/wolfssl/wolfcrypt/rsa.h>
-#include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfssl/wolfcrypt/asn_public.h>
@@ -102,5 +92,4 @@ int decrypt_asym_rsa(const uint8_t *der_key, const size_t key_size,
                      const uint8_t *cipher, const size_t cipher_len,
                      uint8_t *decrypted, const size_t decrypted_size);
 
-// #endif // CRYPTO_EXAMPLE
-// #endif // ECTF_CRYPTO_H
+#endif // ECTF_CRYPTO_H

@@ -11,6 +11,16 @@
  * @copyright Copyright (c) 2025 The MITRE Corporation
  */
 
+#include "wolfssl/wolfssl/wolfcrypt/aes.h"
+#include "wolfssl/wolfssl/wolfcrypt/hash.h"
+#include <wolfssl/wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/ssl.h>
+#include <wolfssl/wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/asn.h>
+#include <wolfssl/wolfssl/wolfcrypt/asn_public.h>
+#include <wolfssl/wolfcrypt/coding.h> // For Base64_Decode
+#include <string.h>
 
 #include <stdint.h>
 #include <string.h>

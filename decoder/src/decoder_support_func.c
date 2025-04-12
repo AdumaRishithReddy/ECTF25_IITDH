@@ -2,6 +2,7 @@
 
 #include <wolfssl/wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfssl/wolfcrypt/ed25519.h>
 #include <wolfssl/wolfssl/wolfcrypt/integer.h>
 #include "wolfssl/wolfssl/wolfcrypt/aes.h"
