@@ -79,7 +79,12 @@ int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) 
     // Check if decoder ID matches, else, discard packet
     if (decr_update_pkt.decoder_id != DECODER_ID) {
         STATUS_LED_RED();
-        print_error("Failed to update subscription - Update not valid for this decoder\n");
+        snprintf(output_buf_core,
+                128,
+                "Failed to update subscription - Update not valid for this decoder. Found ID: %u\n", 
+                decr_update_pkt.decoder_id
+                );
+        print_error(output_buf_core);
         return -1;
     }
 

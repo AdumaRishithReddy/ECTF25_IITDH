@@ -22,7 +22,7 @@ from Crypto.Util import Counter
 # Debug function used to check keys
 # Prints keys as 4 byte integers
 # (only works if key size is multiple of 4)
-def print_as_int(data: bytes, label: str):
+def print_as_int(label: str, data: bytes):
     out_str = label
     for i in range(0, len(data) - 3, 4):
         part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
@@ -89,17 +89,15 @@ class Encoder:
         # Retrieve channel init vector of 16B
         channel_iv_hex_str =  self.channel_details[channel_str]["channel_iv"]
         channel_iv_bytes = bytes.fromhex(channel_iv_hex_str)
-        channel_iv = int.from_bytes(channel_iv_bytes, byteorder='big')
 
         # Create a hash of string of timestamp
         timestamp_str = str(timestamp)
         timestamp_hash_bytes = hashlib.sha256(timestamp_str.encode('utf-8')).digest()[:16]
-        timestamp_hash = int.from_bytes(timestamp_hash_bytes, byteorder='big')
 
         # Create an initial value (CTR mode) of 16B
         # Here, initial value is name mixed_init_vector as
         # on wolfCrypt, the IV is used as the initial value
-        mixed_init_vector = timestamp_hash ^ channel_iv
+        mixed_init_vector = bytes([int(timestamp_hash_bytes[i]) ^ int(channel_iv_bytes[i]) for i in range(16)])
 
         # Create a new counter
         #
@@ -110,7 +108,7 @@ class Encoder:
 
         new_counter = Counter.new(nbits = 128,
                               prefix = b'',
-                              initial_value = mixed_init_vector,
+                              initial_value = int.from_bytes(mixed_init_vector, byteorder='big'),
                               suffix = b'',
                               little_endian = True,
                               )
