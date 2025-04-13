@@ -27,7 +27,9 @@ from loguru import logger
 master_key_type = "AES"
 verify_before_write = False
 
-# TODO: Remove this
+# Debug function used to check keys
+# Prints keys as 4 byte integers
+# (only works if key size is multiple of 4)
 def print_as_int(label: str, data: bytes):
     out_str = label
     for i in range(0, 13, 4):
@@ -36,11 +38,11 @@ def print_as_int(label: str, data: bytes):
 
     print(out_str)
 
-def load_keys(secrets, device_id_str, channel_str):
+def load_keys(secrets, device_id, channel_str):
     """Load the master key, channel key, and initialization vector (IV) from the secrets.
 
     :param secrets: Dictionary containing channel and decoder details.
-    :param device_id_str: String representation of the device ID.
+    :param device_id: String representation of the device ID.
     :param channel_str: String representation of the channel.
     :return: Tuple containing the master key encoder, channel key, and IV.
     :raises ValueError: If the master key, channel key, or IV is not found.
@@ -50,15 +52,15 @@ def load_keys(secrets, device_id_str, channel_str):
     channel_details = secrets["channel_details"]
     decoder_details = secrets["decoder_details"]
 
-    # Load the private encoder master key
-    master_key_str = decoder_details[device_id_str]["master_key_encoder"]
-    if master_key_str is None:
-        raise ValueError("No Master key found for device")
+    # Load the random 16 bytes used to create master key
+    random_16_bytes = decoder_details["random_16_bytes"]
+    if random_16_bytes is None:
+        raise ValueError("No Random 16 bytes found")
 
     if master_key_type == "RSA":
-        master_key_encoder = RSA.import_key(master_key_str)
+        raise NotImplementedError()
     elif master_key_type == "AES":
-        master_key_encoder = bytes.fromhex(master_key_str)
+        random_16_bytes = bytes.fromhex(random_16_bytes)
     else:
         raise ValueError(f"Master Key type {master_key_type} undefined")
 
@@ -72,7 +74,13 @@ def load_keys(secrets, device_id_str, channel_str):
     if iv_hex_str is None:
         raise ValueError("No IV found for channel")
 
-    return master_key_encoder, channel_key_hex_str, iv_hex_str
+    # Create the master key for this device
+    mk_cipher = AES.new(random_16_bytes, AES.MODE_ECB)
+    decoder_id_bytes = device_id.to_bytes(4) * 4
+    master_key = mk_cipher.encrypt(decoder_id_bytes)
+
+
+    return master_key, channel_key_hex_str, iv_hex_str
 
 def create_subscription_struct(device_id, start, end, channel, channel_key_hex_str, iv_hex_str):
     """Create a packed binary structure for the subscription data.
@@ -172,7 +180,7 @@ def gen_subscription(secrets, device_id, start, end, channel):
     secrets = json.loads(secrets)
 
     # Load keys
-    master_key_encoder, channel_key_hex_str, iv_hex_str = load_keys(secrets, device_id_str, channel_str)
+    master_key_encoder, channel_key_hex_str, iv_hex_str = load_keys(secrets, device_id, channel_str)
 
     # Create the subscription struct
     packed_data = create_subscription_struct(device_id, start, end, channel, channel_key_hex_str, iv_hex_str)
@@ -191,7 +199,7 @@ def gen_subscription(secrets, device_id, start, end, channel):
             "iv": bytes.fromhex(iv_hex_str),
         }
 
-        master_key_decoder = secrets["decoder_details"][device_id_str]["master_key_decoder"]
+        master_key_decoder = master_key_encoder
         verify_encrypted_sub(master_key_decoder, encrypted_data, expected_values)
 
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe

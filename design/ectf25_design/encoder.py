@@ -19,6 +19,8 @@ import hashlib
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 
+
+
 # Debug function used to check keys
 # Prints keys as 4 byte integers
 # (only works if key size is multiple of 4)
@@ -29,7 +31,6 @@ def print_as_int(label: str, data: bytes):
         out_str += ' ' + str(part_int)
 
     print(out_str)
-
 
 
 class Encoder:
@@ -118,6 +119,15 @@ class Encoder:
 
         # Encrypt the frame with the hash
         encrypted_frame = cipher_object.encrypt(frame_with_hash)
+
+
+        # Verify if frame was encrypted properly
+        cipher_object_verify = AES.new(channel_key,
+                            AES.MODE_CTR,
+                            nonce = mixed_init_vector[0:15],
+                            initial_value = mixed_init_vector[15:16])
+        decrypted_frame = cipher_object_verify.decrypt(encrypted_frame)
+        print(decrypted_frame[0:64])
 
         # Debug frame count
         self.frame_count += 1

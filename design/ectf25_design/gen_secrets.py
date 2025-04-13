@@ -34,29 +34,6 @@ def gen_secrets(channels: list[int]) -> bytes:
     :returns: Contents of the secrets file
     """
 
-    # List of valid decoder IDs
-    dec_ids = [
-        0xDEADBEEF, 0xCAFEBABE, 0xFEEDFACE, 0x8BADF00D,
-        0xC0FFEE00, 0xBAADF00D, 0xF00DBABE, 0xDEADFA11,
-        0xB16B00B5, 0xBADC0DE0
-    ]
-
-    master_keys_list = {}
-
-    # Generate master keys for each decoder
-    for dec_id in dec_ids:
-        if master_key_type == "RSA":
-            m_keys = RSA.generate(2048)
-            master_key_decoder = m_keys.export_key().decode('utf-8')
-            master_key_encoder = m_keys.public_key().export_key().decode('utf-8')
-        elif master_key_type == "AES":
-            master_key_decoder = os.urandom(16).hex()
-            master_key_encoder = master_key_decoder
-        else:
-            ValueError(f"Master Key type {master_key_type} undefined")
-
-        master_keys_list[dec_id] = (master_key_decoder, master_key_encoder)
-
     secrets = {
         "channel_details": {
             cnum: {
@@ -67,12 +44,10 @@ def gen_secrets(channels: list[int]) -> bytes:
             for cnum in channels + [0]
         },
         "decoder_details": {
-            d_id : {
-                "decoder_id": d_id,
-                "master_key_decoder": master_keys_list[d_id][0],
-                "master_key_encoder": master_keys_list[d_id][1],
-            }
-            for d_id in dec_ids
+            # The Random 16 bytes will be used to
+            # encrypt the (Decoder ID) * 4 in AES-CBC mode.
+            # The ciphertext will be used as the master key
+            "random_16_bytes": os.urandom(16).hex(),
         },
     }
 
