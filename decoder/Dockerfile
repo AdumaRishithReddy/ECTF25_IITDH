@@ -2,17 +2,19 @@
 # Make any changes here to set up your build environment (e.g., installing crypto
 # libraries, dependencies, the compiler for a different language)
 
-FROM ubuntu:24.04
+FROM ubuntu:24.10
 
 LABEL version="0.2"
-LABEL description="Example Decoder Docker Container for the 2025 eCTF"
+LABEL description="IITDH eCTF 2025 Docker Instance"
 
 ARG DEBIAN_FRONTEND=noninteractive
 WORKDIR /root
 
 # Install Requisite Packages
 # do this first because it takes the longest
-RUN apt-get update && apt-get upgrade -y && apt-get install -y \
+RUN apt-get update && apt-get upgrade -y
+
+RUN apt-get install -y \
     gdb \
     gdb-multiarch \
     gcc-arm-none-eabi \
