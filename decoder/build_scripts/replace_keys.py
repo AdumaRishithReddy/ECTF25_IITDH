@@ -1,6 +1,7 @@
 import sys
 import json
 from Crypto.PublicKey import RSA, ECC
+from Crypto.Cipher import AES
 
 master_key_type = "AES"
 signature_type = "EdDSA"
@@ -38,7 +39,7 @@ if __name__ == "__main__":
         print(f"Usage: python {sys.argv[0]} <c-file> <secrets-file> <decoder-id>")
         exit(0)
 
-    decoder_id = str(int(sys.argv[3], base=16))
+    decoder_id = int(sys.argv[3], base=16)
     with open(sys.argv[2]) as secrets_file:
         secrets = json.load(secrets_file)
 
@@ -46,19 +47,30 @@ if __name__ == "__main__":
     # Master Key placeholder replacement
     # ----------------------------------
     if master_key_type == "RSA":
-        rsa_private_key_pem_str = secrets["decoder_details"][decoder_id]["master_key_decoder"]
-        private_key = RSA.import_key(rsa_private_key_pem_str)
-        rsa_key_der = private_key.export_key(format='DER')
+        raise NotImplementedError()
 
-        update_c_file(sys.argv[1], rsa_key_der, "/*$LEN_RSA_PRIV_KEY$*/", "/*$RSA_PRIV_KEY$*/")
-
-        # To prevent compiler time error
-        update_c_file(sys.argv[1], b'', "/*$LEN_AES_KEY$*/", "/*$PLACEHOLDER$*/")
+        # rsa_private_key_pem_str = secrets["decoder_details"][decoder_id]["master_key_decoder"]
+        # private_key = RSA.import_key(rsa_private_key_pem_str)
+        # rsa_key_der = private_key.export_key(format='DER')
+        #
+        # update_c_file(sys.argv[1], rsa_key_der, "/*$LEN_RSA_PRIV_KEY$*/", "/*$RSA_PRIV_KEY$*/")
+        #
+        # # To prevent compiler time error
+        # update_c_file(sys.argv[1], b'', "/*$LEN_AES_KEY$*/", "/*$PLACEHOLDER$*/")
 
     elif master_key_type == "AES":
-        aes_master_key = secrets["decoder_details"][decoder_id]["master_key_decoder"]
-        aes_key_der = bytes.fromhex(aes_master_key)
-        update_c_file(sys.argv[1], aes_key_der, "/*$LEN_AES_KEY$*/", "/*$AES_KEY$*/")
+        # Load the random 16 bytes used to create master key
+        random_16_bytes = secrets["decoder_details"]["random_16_bytes"]
+        if random_16_bytes is None:
+            raise ValueError("No Random 16 bytes found")
+        random_16_bytes = bytes.fromhex(random_16_bytes)
+
+        # Create the master key for this device
+        mk_cipher = AES.new(random_16_bytes, AES.MODE_ECB)
+        decoder_id_bytes = decoder_id.to_bytes(4) * 4
+        aes_key = mk_cipher.encrypt(decoder_id_bytes)
+
+        update_c_file(sys.argv[1], aes_key, "/*$LEN_AES_KEY$*/", "/*$AES_KEY$*/")
 
         # To prevent compile time error
         update_c_file(sys.argv[1], b'', "/*$LEN_RSA_PRIV_KEY$*/", "/*$PLACEHOLDER$*/")
