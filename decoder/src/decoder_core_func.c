@@ -39,7 +39,7 @@ int list_channels()
 
     resp.n_channels = 0;
 
-    for (uint8_t i = 0; i < MAX_CHANNEL_COUNT; i++) {
+    for (uint8_t i = 1; i < MAX_CHANNEL_COUNT; i++) {
 
         if (decoder_status.subscribed_channels[i].active) {
 
@@ -103,7 +103,7 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
             output_buf_core,
             128,
             "Failed to update subscription - Packet is corrupt");
-        print_debug(output_buf_core);
+        print_error(output_buf_core);
         return -1;
     }
 
@@ -132,7 +132,7 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
     // Fill it with updated subscription
     uint8_t i = 0;
 
-    for (i = 0; i < MAX_CHANNEL_COUNT; i++) {
+    for (i = 1; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status.subscribed_channels[i].id == decr_update_pkt.channel ||
             decoder_status.subscribed_channels[i].id == DEFAULT_CHANNEL_ID) {
 
@@ -159,7 +159,7 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
                         decr_update_pkt.channel
                         );
 
-                print_debug(output_buf_core);
+                print_error(output_buf_core);
                 erase_subscription(decr_update_pkt.channel);
                 return -1;
             }
@@ -195,7 +195,7 @@ int erase_subscription(channel_id_t channel_id) {
             output_buf_core,
             128,
             "Trying to erase an unsubscribed channel. Channel %u: Ignoring frame...\n", channel_id);
-        print_debug(output_buf_core);
+        print_error(output_buf_core);
         return -1;
     }
 
@@ -236,8 +236,8 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 "Failed to decode - Frame packet too large/small: %u\n", 
                 pkt_len
                 );
-        print_debug(output_buf_core);
-        write_packet(DECODE_MSG, NULL, 0);
+        print_error(output_buf_core);
+        
         return -1;
     }
 
@@ -251,8 +251,8 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             output_buf_core,
             128,
             "Receiving unsubscribed channel data. Channel %u: Ignoring frame...\n", channel_id);
-        print_debug(output_buf_core);
-        write_packet(DECODE_MSG, NULL, 0);
+        print_error(output_buf_core);
+        
         return -1;
     }
 
@@ -274,10 +274,10 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             snprintf(
                 output_buf_core,
                 128,
-                "Erasing subscription. Channel %u: Ignoring frame...\n", channel_id);
-            print_debug(output_buf_core);
+                "Subscrtiption ended. Erasing... Channel %u: Ignoring frame...\n", channel_id);
+            print_error(output_buf_core);
             erase_subscription(channel_id);
-            write_packet(DECODE_MSG, NULL, 0);
+            
             return -1;
         }
 
@@ -288,9 +288,9 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             snprintf(
                 output_buf_core,
                 128,
-                "Receiving frames not valid for subscription interval. Channel %u: Ignoring frame...\n", channel_id);
-            print_debug(output_buf_core);
-            write_packet(DECODE_MSG, NULL, 0);
+                "Receiving old frames not valid for subscription interval. Channel %u\n", channel_id);
+            print_error(output_buf_core);
+            
             return -1;
         }
 
@@ -300,13 +300,13 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             snprintf(
                 output_buf_core,
                 128,
-                "Out of order frame with timestamp %llu. Last seen timestamp is %llu on channel %u, Ignoring frame...\n",
+                "Out of order frame with timestamp %llu. Last seen timestamp is %llu on channel %u.\n",
                 frame_ts,
                 decoder_status.subscribed_channels[idx].last_frame_timestamp,
                 channel_id
             );
-            print_debug(output_buf_core);
-            write_packet(DECODE_MSG, NULL, 0);
+            print_error(output_buf_core);
+            
             return -1;
         } else {
             decoder_status.subscribed_channels[idx].last_frame_timestamp = frame_ts;
@@ -342,22 +342,21 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 output_buf_core,
                 128,
                 "Unable to set Init Vector: Channel %u: Ignoring frame...\n", channel_id);
-            print_debug(output_buf_core);
-            write_packet(DECODE_MSG, NULL, 0);
+            print_error(output_buf_core);
+            
             return -1;
         }
-        
         
         // Decrypt the frame (and also the hash, not visible here)
         frame_packet_t decrypted_frame;
         ret = decrypt_frame_data(frame_decryptor, new_frame -> data, decrypted_frame.data,  MAX_DECR_FRAME_SIZE);
         if(ret != 0) {
-            write_packet(DECODE_MSG, NULL, 0);
+            print_error("AES Frame decrypt failed! - Data");
             return -1;
         }
         ret = decrypt_frame_data(frame_decryptor, new_frame -> hash, decrypted_frame.hash,  FRAME_HASH_SIZE);
         if(ret != 0) {
-            write_packet(DECODE_MSG, NULL, 0);
+            print_error("AES Frame decrypt failed! - Hash");
             return -1;
         }
 
@@ -369,12 +368,6 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         byte_t computed_hash[FRAME_HASH_SIZE];
         hash(decrypted_frame.data, MAX_DECR_FRAME_SIZE, computed_hash);
 
-        // TODO: Remove debug statements
-        // print_as_int("AES_STRUCT_REG: ", 16, frame_decryptor -> reg, INIT_VEC_LENGTH / 4);
-        // print_as_int("DEC_FRAME_DATA: ", 16, decrypted_frame.data, MAX_DECR_FRAME_SIZE / 4);
-        // print_as_int("DEC_FRAME_HASH: ", 16, decrypted_frame.hash, FRAME_HASH_SIZE / 4);
-        // print_as_int("COMPUTED__HASH: ", 16, computed_hash, FRAME_HASH_SIZE / 4);
-
         ret = strncmp(decrypted_frame.hash, computed_hash, FRAME_HASH_SIZE);
         if(ret != 0) {
             snprintf(
@@ -383,8 +376,8 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 "Frame hash does not match: Channel %u, Ignoring frame...\n",
                 channel_id
             );
-            print_debug(output_buf_core);
-            write_packet(DECODE_MSG, NULL, 0);
+            print_error(output_buf_core);
+            
             return -1;
         }
         
@@ -393,8 +386,8 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         uint8_t pad_length = new_frame -> pad_length;
         if (pad_length >= MAX_DECR_FRAME_SIZE) {
             snprintf(output_buf_core, 128, "Invalid AES padding length! %d\n", pad_length);
-            print_debug(output_buf_core);
-            write_packet(DECODE_MSG, NULL, 0);
+            print_error(output_buf_core);
+            
             return -1;
         }
 
@@ -458,6 +451,30 @@ void init()
 
         flash_simple_erase_page(FLASH_STATUS_ADDR);
         flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
+    }
+
+    for (int i = 0; i < MAX_CHANNEL_COUNT; i++){
+        if(decoder_status.subscribed_channels[i].active) {
+            wc_AesInit(&(decoder_status.subscribed_channels[i].frame_decryptor), 
+                        NULL, 
+                        INVALID_DEVID);
+                            
+            ret = wc_AesSetKey(&(decoder_status.subscribed_channels[i].frame_decryptor),
+                                decoder_status.subscribed_channels[i].channel_key, 
+                                CHNL_KEY_LENGTH, NULL, 
+                                AES_ENCRYPTION);
+                                
+            if(ret != 0) {
+                snprintf(output_buf_core,
+                        128,
+                        "Initialization failed! AES Context cannot be set: Channel %u\n",
+                        decoder_status.subscribed_channels[i].id
+                );
+
+                print_error(output_buf_core);
+                erase_subscription(decoder_status.subscribed_channels[i].id);
+            }
+        }
     }
 
     // Initialize the uart peripheral to enable serial I/O
