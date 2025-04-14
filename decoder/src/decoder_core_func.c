@@ -21,18 +21,12 @@
 // This is used to track decoder subscriptions
 volatile flash_entry_t decoder_status;
 
-
-const byte_t rsa_private_master_key[/*$RSA_PRIV_KEY_LEN$*/] /*$RSA_PRIV_KEY$*/;
-
-const byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
+const byte_t aes_masterconst byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
 
 const byte_t emergency_channel_key[/*$EMERGENCY_CHANNEL_KEY_LEN$*/] /*$EMERGENCY_CHANNEL_KEY$*/;
 
 const byte_t emergency_channel_iv[/*$EMERGENCY_CHANNEL_IV_LEN$*/] /*$EMERGENCY_CHANNEL_IV$*/;
-
-char output_buf_core[128];
-
-/**********************************************************
+***************************************************
  ********************* CORE FUNCTIONS *********************
  **********************************************************/
 int list_channels()
@@ -63,32 +57,56 @@ int list_channels()
 
 
 
-int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) {
+int update_subscription(const pkt_len_t pkt_len, const subscription_update_packet_t *encr_update_pkt) {
 
-    if(pkt_len > MAX_SUBS_UPDATE_SIZE) {
+    if(pkt_len != MAX_SUBS_PKT_SIZE) {
         STATUS_LED_RED();
         snprintf(output_buf_core,
                 128,
-                "Failed to update subscription - Update packet too large: %u\n", 
+                "Failed to update subscription - Update packet too large/small: %u\n", 
                 pkt_len
                 );
         print_error(output_buf_core);
         return -1;
     }
 
-    // Create buffer for writing subscription data
-    subscription_update_packet_t decr_update_pkt;
+    int ret;
 
-    decrypt_subscription_aes(encr_update_pkt, pkt_len, aes_master_key, (byte_t *)&decr_update_pkt);
+    // Decrypt and store subscription data 
+    subscription_update_packet_t decr_update_pkt;
+    
+    ret = decrypt_subscription_aes(encr_update_pkt, 
+                                    MAX_SUBS_PKT_SIZE, 
+                                    aes_master_key, 
+                                    &decr_update_pkt);
+    if(ret != 0) {
+        return -1;
+    }
+
+    // Compute hash of the packet
+    byte_t computed_hash[SUBS_HASH_SIZE];
+    hash(&decr_update_pkt, 
+            MAX_SUBS_PKT_SIZE - SUBS_PAD_SIZE - SUBS_HASH_SIZE, 
+            computed_hash);
+
+
+    print_arify integrity of the update packet
+    ret = strncmp(decr_update_pkt.hash, computed_hash, SUBS_HASH_SIZE);
+    if(ret != 0) {
+        snprintf(
+            output_buf_core,
+            128,
+            "Failed to update subscription - Packet is corrupt");
+        print_debug(output_buf_core);
+        return -1;
+    }
 
     // Check if decoder ID matches, else, discard packet
     if (decr_update_pkt.decoder_id != DECODER_ID) {
         STATUS_LED_RED();
         snprintf(output_buf_core,
                 128,
-                "Failed to update subscription - Update not valid for this decoder. Found ID: %u\n", 
-                decr_update_pkt.decoder_id
-                );
+                "Failed to update subscription - Update not valid for this decoder.");
         print_error(output_buf_core);
         return -1;
     }
@@ -123,7 +141,7 @@ int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) 
                         NULL, 
                         INVALID_DEVID);
                         
-            int ret = wc_AesSetKey(&(decoder_status.subscribed_channels[i].frame_decryptor),
+            ret = wc_AesSetKey(&(decoder_status.subscribed_channels[i].frame_decryptor),
                                 decoder_status.subscribed_channels[i].channel_key, 
                                 CHNL_KEY_LENGTH, NULL, 
                                 AES_ENCRYPTION);
@@ -204,6 +222,18 @@ int erase_subscription(channel_id_t channel_id) {
 
 
 int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
+
+    if(pkt_len != MAX_FRAME_PKT_SIZE) {
+        STATUS_LED_RED();
+        snprintf(output_buf_core,
+                128,
+                "Failed to decode - Frame packet too large/small: %u\n", 
+                pkt_len
+                );
+        print_debug(output_buf_core);
+        return -1;
+    }
+
     channel_id_t channel_id = new_frame -> channel;
     timestamp_t frame_ts = new_frame -> timestamp;
     int ret;
@@ -276,8 +306,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         // Decryption Process starts here
         // ---------------------------------------------------
 
-        // Retrieve the SK and IV
-        const byte_t *ck_buf = decoder_status.subscribed_channels[idx].channel_key;
+        // Retrieve the Channel IV
         const byte_t *iv_buf = decoder_status.subscribed_channels[idx].init_vector;
 
         byte_t time_digest[32];
@@ -327,7 +356,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         hash(decrypted_frame.data, MAX_DECR_FRAME_SIZE, computed_hash);
 
         // TODO: Remove debug statements
-        // print_as_int("AES_STRUCT_REG: ", 16, frame_decryptor -> reg, INIT_VEC_LENGTH / 4);
+        // print_as_int("AESG: ", 16, frame_decryptor -> reg, INIT_VEC_LENGTH / 4);
         // print_as_int("DEC_FRAME_DATA: ", 16, decrypted_frame.data, MAX_DECR_FRAME_SIZE / 4);
         // print_as_int("DEC_FRAME_HASH: ", 16, decrypted_frame.hash, FRAME_HASH_SIZE / 4);
         // print_as_int("COMPUTED__HASH: ", 16, computed_hash, FRAME_HASH_SIZE / 4);

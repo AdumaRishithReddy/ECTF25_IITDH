@@ -40,12 +40,14 @@
 // Packet specific constants
 #define MAX_DECR_FRAME_SIZE 64
 #define FRAME_HASH_SIZE 32
-#define MAX_FULL_FRAME_SIZE sizeof(channel_t) + sizeof(timestamp_t) + sizeof(byte_t) + MAX_DECR_FRAME_SIZE + FRAME_HASH_SIZE
-#define MAX_SUBS_UPDATE_SIZE 64
+#define MAX_FRAME_PKT_SIZE 109
 
 // Subscription specific constants
 #define CHNL_KEY_LENGTH 16
 #define INIT_VEC_LENGTH 16
+#define SUBS_HASH_SIZE 32
+#define MAX_SUBS_PKT_SIZE 96
+#define SUBS_PAD_SIZE 8
 
 
 /**********************************************************
@@ -72,6 +74,8 @@ typedef struct
     channel_id_t channel;
     byte_t channel_key[CHNL_KEY_LENGTH];
     byte_t init_vector[INIT_VEC_LENGTH];
+    byte_t hash[SUBS_HASH_SIZE];
+    byte_t aes_padding[SUBS_PAD_SIZE]; // Always ignore this packing
 } subscription_update_packet_t;
 
 typedef struct

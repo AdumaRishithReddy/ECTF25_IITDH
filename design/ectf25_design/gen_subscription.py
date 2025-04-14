@@ -15,6 +15,7 @@ import argparse
 import json
 from pathlib import Path
 import struct
+import hashlib
 
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
@@ -32,7 +33,7 @@ verify_before_write = False
 # (only works if key size is multiple of 4)
 def print_as_int(label: str, data: bytes):
     out_str = label
-    for i in range(0, 13, 4):
+    for i in range(0, len(data) - 3, 4):
         part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
         out_str += ' ' + str(part_int)
 
@@ -78,8 +79,6 @@ def load_keys(secrets, device_id, channel_str):
     mk_cipher = AES.new(random_16_bytes, AES.MODE_ECB)
     decoder_id_bytes = device_id.to_bytes(4) * 4
     master_key = mk_cipher.encrypt(decoder_id_bytes)
-
-    print_as_int("MK:", master_key)
 
     return master_key, channel_key_hex_str, iv_hex_str
 
@@ -145,16 +144,16 @@ def verify_encrypted_sub(master_key_decoder, encrypted_data, expected_values):
             raise Exception("Padding Error in RSA")
 
     elif master_key_type == "AES":
-        cipher_decoder = AES.new(bytes.fromhex(master_key_decoder), AES.MODE_ECB)
+        cipher_decoder = AES.new(master_key_decoder, AES.MODE_ECB)
         decrypted_data = cipher_decoder.decrypt(encrypted_data)
         decrypted_data = unpad(decrypted_data, AES.block_size)
 
-    unpacked_data = struct.unpack(f"<IQQI16s16s", decrypted_data)
+    unpacked_data = struct.unpack(f"<IQQI16s16s32s", decrypted_data)
 
     # Verify each value
     for key, expected_value in expected_values.items():
         actual_value = unpacked_data[["device_id", "start", "end",
-                                      "channel", "channel_key", "iv"].index(key)]
+                                      "channel", "channel_key", "iv", "hash"].index(key)]
         assert actual_value == expected_value, f"{key} does not match: expected {expected_value}, got {actual_value}"
 
         logger.debug(f"Verified {actual_value}")
@@ -186,8 +185,17 @@ def gen_subscription(secrets, device_id, start, end, channel):
     # Create the subscription struct
     packed_data = create_subscription_struct(device_id, start, end, channel, channel_key_hex_str, iv_hex_str)
 
+    # Create a hash of the subscription struct
+    print(len(packed_data))
+    input()
+    subscription_hash = hashlib.sha256(packed_data).digest()
+
+    print_as_int("SH:", subscription_hash)
+
     # Encrypt the subscription struct
-    encrypted_data = encrypt_subscription_struct(master_key_encoder, packed_data)
+    encrypted_data = encrypt_subscription_struct(master_key_encoder, packed_data + subscription_hash)
+    print(len(encrypted_data))
+    input()
 
     # Verify the encrypted subscription file
     if verify_before_write:
@@ -198,6 +206,7 @@ def gen_subscription(secrets, device_id, start, end, channel):
             "channel": channel,
             "channel_key": bytes.fromhex(channel_key_hex_str),
             "iv": bytes.fromhex(iv_hex_str),
+            "hash": subscription_hash
         }
 
         master_key_decoder = master_key_encoder

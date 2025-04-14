@@ -22,7 +22,7 @@ int list_channels();
  *
  *  @return 0 upon success.  -1 if error.
  */
-int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt);
+int update_subscription(const pkt_len_t pkt_len, const subscription_update_packet_t *encr_update_pkt);
 
 
 /** @brief Erases a subscription at index I in the decoder status struct.

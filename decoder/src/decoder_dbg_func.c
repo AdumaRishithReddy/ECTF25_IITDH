@@ -10,7 +10,7 @@
 
 void print_as_int(const char *label, const size_t label_size, const byte_t *inp_buf, const size_t num_of_int) {
     int32_t *converted_inp = (int32_t *)inp_buf;
-    char out_buf[128];
+    char out_buf[256];
     size_t offset = label_size;
 
     memcpy(out_buf, label, label_size);
@@ -20,7 +20,8 @@ void print_as_int(const char *label, const size_t label_size, const byte_t *inp_
                            converted_inp[i],
                            (i < num_of_int - 1) ? ", " : "");
         // Optionally check if offset reached the buffer capacity
-        if (offset >= sizeof(out_buf)) {
+        if (offset >= 128) {
+            out_buf[offset] = 0x00;
             break;
         }
     }

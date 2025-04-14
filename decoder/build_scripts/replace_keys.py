@@ -82,8 +82,6 @@ if __name__ == "__main__":
         decoder_id_bytes = decoder_id.to_bytes(4) * 4
         aes_key = mk_cipher.encrypt(decoder_id_bytes)
 
-        print_as_int("MK:", aes_key)
-
         update_c_file(sys.argv[1], aes_key, "/*$LEN_AES_KEY$*/", "/*$AES_KEY$*/")
 
         # To prevent compile time error
