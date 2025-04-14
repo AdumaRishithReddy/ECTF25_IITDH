@@ -186,11 +186,7 @@ def gen_subscription(secrets, device_id, start, end, channel):
     packed_data = create_subscription_struct(device_id, start, end, channel, channel_key_hex_str, iv_hex_str)
 
     # Create a hash of the subscription struct
-    print(len(packed_data))
-    input()
     subscription_hash = hashlib.sha256(packed_data).digest()
-
-    print_as_int("SH:", subscription_hash)
 
     # Encrypt the subscription struct
     encrypted_data = encrypt_subscription_struct(master_key_encoder, packed_data + subscription_hash)
