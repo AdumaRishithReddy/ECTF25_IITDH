@@ -194,8 +194,6 @@ def gen_subscription(secrets, device_id, start, end, channel):
 
     # Encrypt the subscription struct
     encrypted_data = encrypt_subscription_struct(master_key_encoder, packed_data + subscription_hash)
-    print(len(encrypted_data))
-    input()
 
     # Verify the encrypted subscription file
     if verify_before_write:
