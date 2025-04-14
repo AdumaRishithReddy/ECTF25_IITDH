@@ -2,6 +2,7 @@ import sys
 import json
 from Crypto.PublicKey import RSA, ECC
 from Crypto.Cipher import AES
+import hashlib
 
 master_key_type = "AES"
 signature_type = "EdDSA"
@@ -78,9 +79,11 @@ if __name__ == "__main__":
         random_16_bytes = bytes.fromhex(random_16_bytes)
 
         # Create the master key for this device
-        mk_cipher = AES.new(random_16_bytes, AES.MODE_ECB)
-        decoder_id_bytes = decoder_id.to_bytes(4) * 4
-        aes_key = mk_cipher.encrypt(decoder_id_bytes)
+        # mk_cipher = AES.new(random_16_bytes, AES.MODE_ECB)
+        # decoder_id_bytes = decoder_id.to_bytes(4) * 4
+        # aes_key = mk_cipher.encrypt(decoder_id_bytes)
+        aes_key = hashlib.pbkdf2_hmac('sha256',random_16_bytes,decoder_id.to_bytes(4,'big'),1000,dklen=16)
+
 
         update_c_file(sys.argv[1], aes_key, "/*$LEN_AES_KEY$*/", "/*$AES_KEY$*/")
 

@@ -76,9 +76,12 @@ def load_keys(secrets, device_id, channel_str):
         raise ValueError("No IV found for channel")
 
     # Create the master key for this device
-    mk_cipher = AES.new(random_16_bytes, AES.MODE_ECB)
-    decoder_id_bytes = device_id.to_bytes(4) * 4
-    master_key = mk_cipher.encrypt(decoder_id_bytes)
+    # mk_cipher = AES.new(random_16_bytes, AES.MODE_ECB)
+    # decoder_id_bytes = device_id.to_bytes(4) * 4
+    # master_key = mk_cipher.encrypt(decoder_id_bytes)
+    
+    master_key = hashlib.pbkdf2_hmac('sha256',random_16_bytes,device_id.to_bytes(4,'big'),1000,dklen=16)
+
 
     return master_key, channel_key_hex_str, iv_hex_str
 
