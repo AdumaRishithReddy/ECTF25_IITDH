@@ -6,6 +6,18 @@ from Crypto.Cipher import AES
 master_key_type = "AES"
 signature_type = "EdDSA"
 
+# Debug function used to check keys
+# Prints keys as 4 byte integers
+# (only works if key size is multiple of 4)
+def print_as_int(label: str, data: bytes):
+    out_str = label
+    for i in range(0, len(data) - 3, 4):
+        part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
+        out_str += ' ' + str(part_int)
+
+    print(out_str)
+
+
 def bytes_to_c_array(byte_data):
     hex_list = [f"0x{byte:02x}" for byte in byte_data]
     # Create lines with 8 elements each
@@ -69,6 +81,8 @@ if __name__ == "__main__":
         mk_cipher = AES.new(random_16_bytes, AES.MODE_ECB)
         decoder_id_bytes = decoder_id.to_bytes(4) * 4
         aes_key = mk_cipher.encrypt(decoder_id_bytes)
+
+        print_as_int("MK:", aes_key)
 
         update_c_file(sys.argv[1], aes_key, "/*$LEN_AES_KEY$*/", "/*$AES_KEY$*/")
 

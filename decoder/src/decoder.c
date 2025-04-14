@@ -37,8 +37,6 @@
 
 int main(void)
 {
-    // TODO: Remove WolfSSL Debugging ON
-    wolfSSL_Debugging_ON();
     wolfCrypt_Init();
 
     char output_buf[128] = {0};

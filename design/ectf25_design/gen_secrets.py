@@ -21,6 +21,17 @@ from loguru import logger
 
 master_key_type = "AES"
 
+# Debug function used to check keys
+# Prints keys as 4 byte integers
+# (only works if key size is multiple of 4)
+def print_as_int(label: str, data: bytes):
+    out_str = label
+    for i in range(0, len(data) - 3, 4):
+        part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
+        out_str += ' ' + str(part_int)
+
+    print(out_str)
+
 def gen_secrets(channels: list[int]) -> bytes:
     """Generate the contents secrets file
 
@@ -46,7 +57,7 @@ def gen_secrets(channels: list[int]) -> bytes:
         "decoder_details": {
             # The Random 16 bytes will be used to
             # encrypt the (Decoder ID) * 4 in AES-CBC mode.
-            # The ciphertext will be used as the master key
+            # The resulting ciphertext will is the MK
             "random_16_bytes": os.urandom(16).hex(),
         },
     }

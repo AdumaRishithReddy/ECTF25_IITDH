@@ -37,9 +37,11 @@
 // This is a canary value so we can confirm whether this decoder has booted before
 #define FLASH_FIRST_BOOT 0xDEADBEEF
 
-// Frame specific constants
+// Packet specific constants
 #define MAX_DECR_FRAME_SIZE 64
 #define FRAME_HASH_SIZE 32
+#define MAX_FULL_FRAME_SIZE sizeof(channel_t) + sizeof(timestamp_t) + sizeof(byte_t) + MAX_DECR_FRAME_SIZE + FRAME_HASH_SIZE
+#define MAX_SUBS_UPDATE_SIZE 64
 
 // Subscription specific constants
 #define CHNL_KEY_LENGTH 16

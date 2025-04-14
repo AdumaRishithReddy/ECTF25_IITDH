@@ -98,37 +98,3 @@ int hash(const void *data,
     // Pass values to hash
     return wc_Sha256Hash((uint8_t *)data, len, hash_out);
 }
-
-
-
-int decrypt_asym_rsa(const uint8_t *cipher, const size_t cipher_len,
-                const uint8_t *der_key, const size_t key_size,
-                uint8_t *decr_out_buf, const size_t decr_out_buf_size)
-{
-    RsaKey key;
-    size_t idx = 0;
-
-    // Load DER-encoded RSA private key
-    int ret = wc_RsaPrivateKeyDecode(der_key, /*Private Key in DER format*/
-                                &idx, /*Start INDEX of DER key*/
-                                &key, /* RSA struct to initialize */
-                                key_size);
-    if (ret != 0) {
-        printf("RSA Key decode failed: %d\n", ret);
-        wc_FreeRsaKey(&key);
-        return -1;
-    }
-
-    // Decrypt data
-    int decrypted_len = wc_RsaPrivateDecrypt(cipher, cipher_len, decr_out_buf, decr_out_buf_size, &key);
-    if (decrypted_len < 0) {
-        printf("Decryption failed: %d\n", decrypted_len);
-        wc_FreeRsaKey(&key);
-        return -1;
-    }
-
-    // Cleanup
-    wc_FreeRsaKey(&key);
-
-    return decrypted_len; // Return the length of the decrypted data
-}

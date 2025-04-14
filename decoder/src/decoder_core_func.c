@@ -65,16 +65,21 @@ int list_channels()
 
 int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt) {
 
+    if(pkt_len > MAX_SUBS_UPDATE_SIZE) {
+        STATUS_LED_RED();
+        snprintf(output_buf_core,
+                128,
+                "Failed to update subscription - Update packet too large: %u\n", 
+                pkt_len
+                );
+        print_error(output_buf_core);
+        return -1;
+    }
+
     // Create buffer for writing subscription data
     subscription_update_packet_t decr_update_pkt;
 
-#ifdef USERSA
-    decrypt_subscription_rsa(pkt_len, encr_update_pkt,
-                            rsa_private_master_key, sizeof(rsa_private_master_key), &decr_update_pkt, sizeof(subscription_update_packet_t))
-#else
     decrypt_subscription_aes(encr_update_pkt, pkt_len, aes_master_key, (byte_t *)&decr_update_pkt);
-#endif
-
 
     // Check if decoder ID matches, else, discard packet
     if (decr_update_pkt.decoder_id != DECODER_ID) {
@@ -255,7 +260,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             snprintf(
                 output_buf_core,
                 128,
-                "Out of order frame with timestamp %u. Last seen timestamp is %u on channel %u, Ignoring frame...\n",
+                "Out of order frame with timestamp %llu. Last seen timestamp is %llu on channel %u, Ignoring frame...\n",
                 frame_ts,
                 decoder_status.subscribed_channels[idx].last_frame_timestamp,
                 channel_id
@@ -272,7 +277,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         // ---------------------------------------------------
 
         // Retrieve the SK and IV
-        const byte_t *sk_buf = decoder_status.subscribed_channels[idx].channel_key;
+        const byte_t *ck_buf = decoder_status.subscribed_channels[idx].channel_key;
         const byte_t *iv_buf = decoder_status.subscribed_channels[idx].init_vector;
 
         byte_t time_digest[32];
@@ -287,6 +292,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         for (int i = 0; i < INIT_VEC_LENGTH; i++) {
             mixed_iv_buf[i] = iv_buf[i] ^ time_digest[i];
         }
+        mixed_iv_buf[INIT_VEC_LENGTH - 1] = 0x00; // Force set last byte to 0
 
         // Set the AES struct IV to Mixed IV
         Aes *frame_decryptor = &(decoder_status.subscribed_channels[idx].frame_decryptor);
@@ -320,6 +326,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         byte_t computed_hash[FRAME_HASH_SIZE];
         hash(decrypted_frame.data, MAX_DECR_FRAME_SIZE, computed_hash);
 
+        // TODO: Remove debug statements
         // print_as_int("AES_STRUCT_REG: ", 16, frame_decryptor -> reg, INIT_VEC_LENGTH / 4);
         // print_as_int("DEC_FRAME_DATA: ", 16, decrypted_frame.data, MAX_DECR_FRAME_SIZE / 4);
         // print_as_int("DEC_FRAME_HASH: ", 16, decrypted_frame.hash, FRAME_HASH_SIZE / 4);
@@ -334,8 +341,10 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 channel_id
             );
             print_debug(output_buf_core);
+            write_packet(DECODE_MSG, decrypted_frame.data, MAX_DECR_FRAME_SIZE);
             return -1;
         }
+        
 
         // Calculate padding
         uint8_t pad_length = new_frame -> pad_length;
@@ -380,7 +389,7 @@ void init()
 
         // Write in data for emergency channel
         subscription[0].id = EMERGENCY_CHANNEL;
-        subscription[0].start_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
+        subscription[0].start_timestamp = 0;
         subscription[0].end_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
         subscription[0].active = true;
 

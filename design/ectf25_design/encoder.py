@@ -115,19 +115,27 @@ class Encoder:
         cipher_object = AES.new(channel_key,
                             AES.MODE_CTR,
                             nonce = mixed_init_vector[0:15],
-                            initial_value = mixed_init_vector[15:16])
+                            initial_value = b'\x00')
 
         # Encrypt the frame with the hash
         encrypted_frame = cipher_object.encrypt(frame_with_hash)
 
 
         # Verify if frame was encrypted properly
-        cipher_object_verify = AES.new(channel_key,
-                            AES.MODE_CTR,
-                            nonce = mixed_init_vector[0:15],
-                            initial_value = mixed_init_vector[15:16])
-        decrypted_frame = cipher_object_verify.decrypt(encrypted_frame)
-        print(decrypted_frame[0:64])
+        # cipher_object_verify = AES.new(channel_key,
+        #                     AES.MODE_CTR,
+        #                     nonce = mixed_init_vector[0:15],
+        #                     initial_value = mixed_init_vector[15:16])
+        # decrypted_frame = cipher_object_verify.decrypt(encrypted_frame[0:64])
+        # decrypted_hash = cipher_object_verify.decrypt(encrypted_frame[64:])
+        #
+        # if decrypted_hash != frame_hash:
+        #     print(decrypted_hash)
+        #     print(frame_hash)
+        #     print("Computed hash and decrypted hash do not match!")
+
+        print(timestamp)
+        print(frame)
 
         # Debug frame count
         self.frame_count += 1

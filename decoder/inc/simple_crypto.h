@@ -74,21 +74,4 @@ int encrypt_sym(const uint8_t *plaintext, const size_t len, const uint8_t *key, 
  * @return 0 on success, non-zero for other error
  */
 int hash(const void *data, const size_t len, uint8_t *hash_out);
-
-/**
- * @brief Decrypts data using RSA asymmetric decryption.
-
- * @param cipher A pointer to the buffer containing the ciphertext to decrypt.
- * @param cipher_len The length of the ciphertext buffer.
- * @param der_key A pointer to the DER-encoded RSA private key.
- * @param key_size The size of the DER-encoded key in bytes.
- * @param decr_out_buf A pointer to the buffer where the decrypted data will be stored.
- * @param decr_out_buf_size The size of the output buffer in bytes.
- *
- * @return On success, returns the length of the decrypted data; on error, returns -1.
- */
-int decrypt_asym_rsa(const uint8_t *der_key, const size_t key_size,
-                     const uint8_t *cipher, const size_t cipher_len,
-                     uint8_t *decrypted, const size_t decrypted_size);
-
 #endif // ECTF_CRYPTO_H

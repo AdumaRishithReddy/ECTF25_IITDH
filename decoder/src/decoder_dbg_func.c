@@ -26,6 +26,8 @@ void print_as_int(const char *label, const size_t label_size, const byte_t *inp_
     }
     print_debug(out_buf);
 }
+
+
 void print_hex_deb(const char *label, uint8_t *data, size_t len)
 {
     char buffer[len * 2 + 50]; // Buffer to store formatted output

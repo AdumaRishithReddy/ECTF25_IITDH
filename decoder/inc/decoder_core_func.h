@@ -16,15 +16,13 @@ int list_channels();
 /** @brief Updates the channel subscription for a subset of channels.
  *
  *  @param pkt_len The length of the incoming packet
- *  @param update A pointer to an array of channel_update structs,
- *      which contains the channel number, start, and end timestamps
- *      for each channel being updated.
+ *  @param encr_update_pkt A pointer to a channel subscription update packet
  *
  *  @note Take care to note that this system is little endian.
  *
  *  @return 0 upon success.  -1 if error.
  */
-int update_subscription(const pkt_len_t pkt_len, const byte_t *update);
+int update_subscription(const pkt_len_t pkt_len, const byte_t *encr_update_pkt);
 
 
 /** @brief Erases a subscription at index I in the decoder status struct.

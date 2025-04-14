@@ -22,7 +22,7 @@
  *
  *  @param channel The channel number to be checked.
  *  @param decoder_status The details of all subscribed channels
- *  @return 1 if the the decoder is subscribed to the channel.  0 if not.
+ *  @return 1 if the decoder is subscribed to the channel.  0 if not.
  */
 int is_subscribed(const channel_id_t channel, const flash_entry_t *decoder_status);
 
@@ -74,6 +74,7 @@ int decrypt_subscription_aes(const byte_t *update_packet,
  * @param frame_decryptor A pointer to the Aes structure used for decryption.
  * @param encr_frame_data A pointer to the encrypted frame data.
  * @param decr_frame_data A pointer to the buffer where the decrypted frame data will be stored.
+ * @param data_len Length of data to be decrypted
  *
  * @return int Returns 0 on success or -1 otherwise.
  */

@@ -79,6 +79,7 @@ def load_keys(secrets, device_id, channel_str):
     decoder_id_bytes = device_id.to_bytes(4) * 4
     master_key = mk_cipher.encrypt(decoder_id_bytes)
 
+    print_as_int("MK:", master_key)
 
     return master_key, channel_key_hex_str, iv_hex_str
 

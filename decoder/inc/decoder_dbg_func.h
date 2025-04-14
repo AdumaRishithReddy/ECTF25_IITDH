@@ -20,6 +20,14 @@
  */
 void print_as_int(const char* label, const size_t label_size, const byte_t *inp_buf, const size_t num_of_int);
 
+
+/**
+ * @brief Print a byte buffer in hexadecimal notation
+ *
+ * @param label Label for the data.
+ * @param data Array to print
+ * @param len Size of the buffer.
+ */
 void print_hex_deb(const char *label, uint8_t *data, size_t len);
 
 #endif
