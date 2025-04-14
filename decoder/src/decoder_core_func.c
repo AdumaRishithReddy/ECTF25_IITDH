@@ -93,8 +93,8 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
             computed_hash);
 
 
-    print_as_int("COMPUTED__HASH: ", 16, computed_hash, SUBS_HASH_SIZE);
-    print_as_int("DEC_PACKT_HASH: ", 16, decr_update_pkt.hash, SUBS_HASH_SIZE);
+    print_as_int("COMPUTED__HASH: ", 16, computed_hash, 8);
+    print_as_int("DEC_PACKT_HASH: ", 16, decr_update_pkt.hash, 8);
     
     // Verify integrity of the update packet
     ret = strncmp(decr_update_pkt.hash, computed_hash, SUBS_HASH_SIZE);
