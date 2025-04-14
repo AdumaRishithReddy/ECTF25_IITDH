@@ -199,7 +199,9 @@ int erase_subscription(channel_id_t channel_id) {
     // Erase channel if found (Do not erase ID)
     for(uint8_t idx = 0; idx < MAX_CHANNEL_COUNT; idx++) {
 
-        if(decoder_status.subscribed_channels[idx].id != channel_id) {
+        // Find the entry with the channel ID which is active
+        if(!(decoder_status.subscribed_channels[idx].id == channel_id &&
+            decoder_status.subscribed_channels[idx].active)) {
             continue;
         }
 
@@ -264,30 +266,18 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             continue;
         }
 
-        // If frame timestamp crosses end timestamp, discard it, erase the subscription
+        // If frame timestamp is out of subscription bounds, discard it
         if (channel_id != EMERGENCY_CHANNEL &&
-            frame_ts > decoder_status.subscribed_channels[idx].end_timestamp
+            (
+                frame_ts > decoder_status.subscribed_channels[idx].end_timestamp ||
+                frame_ts < decoder_status.subscribed_channels[idx].start_timestamp 
+            )
         ) {
             snprintf(
                 output_buf_core,
                 128,
-                "Subscrtiption ended. Erasing... Channel %u: Ignoring frame...\n", channel_id);
+                "Receiving frames not valid for subscription interval. Channel %u: Ignoring frame...\n", channel_id);
             print_error(output_buf_core);
-            erase_subscription(channel_id);
-            
-            return -1;
-        }
-
-        // If frame timestamp is smaller than subscription timestamp, ignore it
-        if (channel_id != EMERGENCY_CHANNEL &&
-            frame_ts < decoder_status.subscribed_channels[idx].start_timestamp
-        ) {
-            snprintf(
-                output_buf_core,
-                128,
-                "Receiving old frames not valid for subscription interval. Channel %u\n", channel_id);
-            print_error(output_buf_core);
-            
             return -1;
         }
 
@@ -469,7 +459,6 @@ void init()
                 );
 
                 print_error(output_buf_core);
-                erase_subscription(decoder_status.subscribed_channels[i].id);
             }
         }
     }
