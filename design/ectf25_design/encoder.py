@@ -134,8 +134,9 @@ class Encoder:
         #     print(frame_hash)
         #     print("Computed hash and decrypted hash do not match!")
 
-        print(timestamp)
-        print(frame)
+        # TODO: Remove debug statements
+        # print(timestamp)
+        # print(frame)
 
         # Debug frame count
         self.frame_count += 1
