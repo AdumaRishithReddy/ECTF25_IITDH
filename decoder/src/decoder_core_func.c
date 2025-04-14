@@ -21,12 +21,15 @@
 // This is used to track decoder subscriptions
 volatile flash_entry_t decoder_status;
 
-const byte_t aes_masterconst byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
+const byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
 
 const byte_t emergency_channel_key[/*$EMERGENCY_CHANNEL_KEY_LEN$*/] /*$EMERGENCY_CHANNEL_KEY$*/;
 
 const byte_t emergency_channel_iv[/*$EMERGENCY_CHANNEL_IV_LEN$*/] /*$EMERGENCY_CHANNEL_IV$*/;
-***************************************************
+
+char output_buf_core[128];
+
+/**********************************************************
  ********************* CORE FUNCTIONS *********************
  **********************************************************/
 int list_channels()
@@ -90,7 +93,10 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
             computed_hash);
 
 
-    print_arify integrity of the update packet
+    print_as_int("COMPUTED__HASH: ", 16, computed_hash, SUBS_HASH_SIZE);
+    print_as_int("DEC_PACKT_HASH: ", 16, decr_update_pkt.hash, SUBS_HASH_SIZE);
+    
+    // Verify integrity of the update packet
     ret = strncmp(decr_update_pkt.hash, computed_hash, SUBS_HASH_SIZE);
     if(ret != 0) {
         snprintf(
@@ -231,6 +237,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 pkt_len
                 );
         print_debug(output_buf_core);
+        write_packet(DECODE_MSG, NULL, 0);
         return -1;
     }
 
@@ -245,6 +252,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             128,
             "Receiving unsubscribed channel data. Channel %u: Ignoring frame...\n", channel_id);
         print_debug(output_buf_core);
+        write_packet(DECODE_MSG, NULL, 0);
         return -1;
     }
 
@@ -269,6 +277,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 "Erasing subscription. Channel %u: Ignoring frame...\n", channel_id);
             print_debug(output_buf_core);
             erase_subscription(channel_id);
+            write_packet(DECODE_MSG, NULL, 0);
             return -1;
         }
 
@@ -281,6 +290,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 128,
                 "Receiving frames not valid for subscription interval. Channel %u: Ignoring frame...\n", channel_id);
             print_debug(output_buf_core);
+            write_packet(DECODE_MSG, NULL, 0);
             return -1;
         }
 
@@ -296,6 +306,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 channel_id
             );
             print_debug(output_buf_core);
+            write_packet(DECODE_MSG, NULL, 0);
             return -1;
         } else {
             decoder_status.subscribed_channels[idx].last_frame_timestamp = frame_ts;
@@ -332,6 +343,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 128,
                 "Unable to set Init Vector: Channel %u: Ignoring frame...\n", channel_id);
             print_debug(output_buf_core);
+            write_packet(DECODE_MSG, NULL, 0);
             return -1;
         }
         
@@ -340,10 +352,12 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         frame_packet_t decrypted_frame;
         ret = decrypt_frame_data(frame_decryptor, new_frame -> data, decrypted_frame.data,  MAX_DECR_FRAME_SIZE);
         if(ret != 0) {
+            write_packet(DECODE_MSG, NULL, 0);
             return -1;
         }
         ret = decrypt_frame_data(frame_decryptor, new_frame -> hash, decrypted_frame.hash,  FRAME_HASH_SIZE);
         if(ret != 0) {
+            write_packet(DECODE_MSG, NULL, 0);
             return -1;
         }
 
@@ -356,7 +370,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         hash(decrypted_frame.data, MAX_DECR_FRAME_SIZE, computed_hash);
 
         // TODO: Remove debug statements
-        // print_as_int("AESG: ", 16, frame_decryptor -> reg, INIT_VEC_LENGTH / 4);
+        // print_as_int("AES_STRUCT_REG: ", 16, frame_decryptor -> reg, INIT_VEC_LENGTH / 4);
         // print_as_int("DEC_FRAME_DATA: ", 16, decrypted_frame.data, MAX_DECR_FRAME_SIZE / 4);
         // print_as_int("DEC_FRAME_HASH: ", 16, decrypted_frame.hash, FRAME_HASH_SIZE / 4);
         // print_as_int("COMPUTED__HASH: ", 16, computed_hash, FRAME_HASH_SIZE / 4);
@@ -370,7 +384,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 channel_id
             );
             print_debug(output_buf_core);
-            write_packet(DECODE_MSG, decrypted_frame.data, MAX_DECR_FRAME_SIZE);
+            write_packet(DECODE_MSG, NULL, 0);
             return -1;
         }
         
@@ -380,11 +394,12 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         if (pad_length >= MAX_DECR_FRAME_SIZE) {
             snprintf(output_buf_core, 128, "Invalid AES padding length! %d\n", pad_length);
             print_debug(output_buf_core);
+            write_packet(DECODE_MSG, NULL, 0);
             return -1;
         }
 
         // Write the decrypted frame data to UART
-        write_packet(DECODE_MSG, decrypted_frame.data, MAX_DECR_FRAME_SIZE);
+        write_packet(DECODE_MSG, decrypted_frame.data, MAX_DECR_FRAME_SIZE - pad_length);
 
         return 0;
     }
