@@ -117,14 +117,10 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
         return -1;
     }
 
-    // Check if somebody is tryng to update emergency channel or default ID
+    // Check if somebody is tryng to update emergency channel
     if (decr_update_pkt.channel == EMERGENCY_CHANNEL) {
         STATUS_LED_RED();
         print_error("Failed to update subscription - cannot subscribe to emergency channel\n");
-        return -1;
-    } else if (decr_update_pkt.channel == DEFAULT_CHANNEL_ID) {
-        STATUS_LED_RED();
-        print_error("Failed to update subscription - default channel subscription detected\n");
         return -1;
     }
 
