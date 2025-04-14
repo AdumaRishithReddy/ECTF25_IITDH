@@ -130,7 +130,8 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
 
     for (i = 1; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status.subscribed_channels[i].id == decr_update_pkt.channel ||
-            decoder_status.subscribed_channels[i].id == DEFAULT_CHANNEL_ID) {
+            (decoder_status.subscribed_channels[i].id == DEFAULT_CHANNEL_ID && 
+            !decoder_status.subscribed_channels[i].active)) {
 
             decoder_status.subscribed_channels[i].id = decr_update_pkt.channel;
             decoder_status.subscribed_channels[i].active = true;

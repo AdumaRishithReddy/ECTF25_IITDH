@@ -29,7 +29,7 @@
  *********************** CONSTANTS ************************
  **********************************************************/
 
-#define MAX_CHANNEL_COUNT 8
+#define MAX_CHANNEL_COUNT 16
 #define EMERGENCY_CHANNEL 0
 #define DEFAULT_CHANNEL_TIMESTAMP 0xFFFFFFFFFFFFFFFF
 #define DEFAULT_CHANNEL_ID 0xFFFFFFFF
