@@ -23,13 +23,6 @@
 #include <wolfssl/wolfcrypt/coding.h> // For Base64_Decode
 #include <string.h>
 
-/******************************** MACRO DEFINITIONS ********************************/
-// #define BLOCK_SIZE AES_BLOCK_SIZE
-// #define KEY_SIZE 16
-// #define HASH_SIZE MD5_DIGEST_SIZE
-// #define DER_SIZE 2048
-// #define RSA_KEY_SIZE 2048 // RSA 2048-bit key
-// #define RSA_PEM_SIZE 2048
 
 /******************************** FUNCTION PROTOTYPES ********************************/
 /** @brief Encrypts plaintext using a symmetric cipher

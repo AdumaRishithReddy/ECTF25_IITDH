@@ -1,5 +1,4 @@
 #include "decoder_core_func.h"
-#
 #include "decoder_support_func.h"
 #include "decoder_dbg_func.h"
 #include "decoder_types.h"
@@ -8,30 +7,10 @@
 #include <stddef.h>
 
 #include "status_led.h"
-#include "mpu_armv7.h"
-
 #include "host_messaging.h"
 #include "simple_uart.h"
 #include "simple_crypto.h"
 #include "simple_flash.h"
-
-
-/**********************************************************
- ********************* MEMPROT-MACROS *********************
- **********************************************************/
-
-#define ENBL_DECODER_STATUS_RW() enable_mpu_access_rw(1, (uint32_t)&decoder_status, 4096)
-#define DSBL_DECODER_STATUS_RW() disable_mpu_access(1, (uint32_t)&decoder_status, 4096)
-
-#define ENBL_AES_MASTER_KEY_RO() enable_mpu_access_ro(2, (uint32_t)&aes_master_key, 4096)
-#define DSBL_AES_MASTER_KEY_RO() disable_mpu_access(2, (uint32_t)&aes_master_key, 4096)
-
-#define ENBL_EMGNCY_CHL_KEY_RO() enable_mpu_access_ro(3, (uint32_t)&emergency_channel_key, 32)
-#define DSBL_EMGNCY_CHL_KEY_RO() disable_mpu_access(3, (uint32_t)&emergency_channel_key, 32)
-
-#define ENBL_EMGNCY_CHL_IV_RO() enable_mpu_access_ro(4, (uint32_t)&emergency_channel_iv, 32)
-#define DSBL_EMGNCY_CHL_IV_RO() disable_mpu_access(4, (uint32_t)&emergency_channel_iv, 32)
-
 
 /**********************************************************
  ************************ GLOBALS *************************
@@ -40,27 +19,22 @@
 char output_buf_core[128];
 
 // 16B
-__attribute__((aligned(32)))
 const byte_t aes_master_key[/*$LEN_AES_KEY$*/] /*$AES_KEY$*/;
 
 //16B
-__attribute__((aligned(32)))
 const byte_t emergency_channel_key[/*$EMERGENCY_CHANNEL_KEY_LEN$*/] /*$EMERGENCY_CHANNEL_KEY$*/;
 
 //16B
-__attribute__((aligned(32)))
 const byte_t emergency_channel_iv[/*$EMERGENCY_CHANNEL_IV_LEN$*/] /*$EMERGENCY_CHANNEL_IV$*/;
 
 // This is used to track decoder subscriptions
 // 3400B
-__attribute__((aligned(4096))) 
 volatile flash_entry_t decoder_status;
 
 
 /**********************************************************
  ********************* CORE FUNCTIONS *********************
  **********************************************************/
- __attribute__((aligned(4096))) 
 int list_channels()
 {
     list_response_t resp;
@@ -68,7 +42,6 @@ int list_channels()
 
     resp.n_channels = 0;
 
-    ENBL_DECODER_STATUS_RW();
     for (uint8_t i = 1; i < MAX_CHANNEL_COUNT; i++) {
 
         if (decoder_status.subscribed_channels[i].active) {
@@ -79,7 +52,6 @@ int list_channels()
             resp.n_channels++;
         }
     }
-    DSBL_DECODER_STATUS_RW();
 
     len = sizeof(resp.n_channels) + (sizeof(channel_info_t) * resp.n_channels);
 
@@ -93,6 +65,11 @@ int list_channels()
 
 int update_subscription(const pkt_len_t pkt_len, const subscription_update_packet_t *encr_update_pkt) {
 
+    // -------------------------------------------------------------
+    // Checks for ensuring no pesky subsc. are decoded - Packet size
+    // -------------------------------------------------------------
+
+    // Ensure subscription packet has a valid length
     if(pkt_len != MAX_SUBS_PKT_SIZE) {
         STATUS_LED_RED();
         snprintf(output_buf_core,
@@ -106,16 +83,17 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
 
     int ret;
 
+    // -------------------------------------------------------------
+    // Decryption and Hashing operations
+    // -------------------------------------------------------------
+
     // Decrypt and store subscription data 
     subscription_update_packet_t decr_update_pkt;
-
-    ENBL_AES_MASTER_KEY_RO();
+    
     ret = decrypt_subscription_aes(encr_update_pkt, 
                                     MAX_SUBS_PKT_SIZE, 
                                     aes_master_key, 
                                     &decr_update_pkt);
-    DSBL_AES_MASTER_KEY_RO();
-
     if(ret != 0) {
         return -1;
     }
@@ -125,6 +103,10 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
     hash(&decr_update_pkt, 
             MAX_SUBS_PKT_SIZE - SUBS_PAD_SIZE - SUBS_HASH_SIZE, 
             computed_hash);
+
+    // -------------------------------------------------------------
+    // More checks to make sure no pesky subscriptions are used
+    // -------------------------------------------------------------
     
     // Verify integrity of the update packet
     ret = strncmp(decr_update_pkt.hash, computed_hash, SUBS_HASH_SIZE);
@@ -154,11 +136,21 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
         return -1;
     }
 
+    // Check if somebody is tryng update with a start graeter than end
+    if (decr_update_pkt.start_timestamp > decr_update_pkt.end_timestamp) {
+        STATUS_LED_RED();
+        print_error("Failed to update subscription - start timestamp is greate than end\n");
+        return -1;
+    }
+
+    // -------------------------------------------------------------
+    // Try to update the decoder status using the subscription
+    // -------------------------------------------------------------
+
     // Find the first empty slot or slot with existing subscription in the subscription array
     // Fill it with updated subscription
     uint8_t i = 1;
 
-    ENBL_DECODER_STATUS_RW();
     for (i = 1; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status.subscribed_channels[i].id == decr_update_pkt.channel ||
             (decoder_status.subscribed_channels[i].id == DEFAULT_CHANNEL_ID && 
@@ -171,10 +163,12 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
             memcpy(decoder_status.subscribed_channels[i].channel_key, decr_update_pkt.channel_key, CHNL_KEY_LENGTH);
             memcpy(decoder_status.subscribed_channels[i].init_vector, decr_update_pkt.init_vector, INIT_VEC_LENGTH);
             
+            // Initialize the AES context
             wc_AesInit(&(decoder_status.subscribed_channels[i].frame_decryptor), 
                         NULL, 
                         INVALID_DEVID);
                         
+            // Set the AES key as Channel key
             ret = wc_AesSetKey(&(decoder_status.subscribed_channels[i].frame_decryptor),
                                 decoder_status.subscribed_channels[i].channel_key, 
                                 CHNL_KEY_LENGTH, NULL, 
@@ -189,7 +183,6 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
 
                 print_error(output_buf_core);
                 erase_subscription(decr_update_pkt.channel);
-                DSBL_DECODER_STATUS_RW();
                 return -1;
             }
 
@@ -198,7 +191,6 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
             break;
         }
     }
-    DSBL_DECODER_STATUS_RW();
 
     // If we do not have any room for more subscriptions - throw an error
     if (i == MAX_CHANNEL_COUNT) {
@@ -218,13 +210,8 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
 
 
 int erase_subscription(channel_id_t channel_id) {
-
     // Check if channel is subscribed to
-    ENBL_DECODER_STATUS_RW();
-    bool is_sub = is_subscribed(channel_id, &decoder_status);
-    DSBL_DECODER_STATUS_RW();
-
-    if (!is_sub) {
+    if (!is_subscribed(channel_id, &decoder_status)) {
         snprintf(
             output_buf_core,
             128,
@@ -233,8 +220,7 @@ int erase_subscription(channel_id_t channel_id) {
         return -1;
     }
 
-    // Erase channel data if found (Do not erase ID)
-    ENBL_DECODER_STATUS_RW();
+    // Erase channel if found (Do not erase ID)
     for(uint8_t idx = 0; idx < MAX_CHANNEL_COUNT; idx++) {
 
         // Find the entry with the channel ID which is active
@@ -256,7 +242,6 @@ int erase_subscription(channel_id_t channel_id) {
         flash_simple_erase_page(FLASH_STATUS_ADDR);
         flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
     }
-    DSBL_DECODER_STATUS_RW();
 
     return 0;
 }
@@ -288,11 +273,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
     int ret;
 
     // Throw an error if illegal channel data is being received
-    ENBL_DECODER_STATUS_RW();
-    bool is_sub = is_subscribed(channel_id, &decoder_status);
-    DSBL_DECODER_STATUS_RW();
-
-    if (!is_sub) {
+    if (!is_subscribed(channel_id, &decoder_status)) {
         snprintf(
             output_buf_core,
             128,
@@ -302,12 +283,11 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         return -1;
     }
 
-    ENBL_DECODER_STATUS_RW();
     for(int idx = 0; idx < MAX_CHANNEL_COUNT; idx++) {
 
-        // ----------------------------------------------------
+        // -----------------------------------------------------
         // More Checks for ensuring no pesky frames are decoded
-        // ----------------------------------------------------
+        // -----------------------------------------------------
 
         // Go ahead only if the channel id is found in our subscription
         if(decoder_status.subscribed_channels[idx].id != channel_id) {
@@ -326,7 +306,6 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 128,
                 "Receiving frames not valid for subscription interval. Channel %u: Ignoring frame...\n", channel_id);
             print_error(output_buf_core);
-            DSBL_DECODER_STATUS_RW();
             return -1;
         }
 
@@ -342,7 +321,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 channel_id
             );
             print_error(output_buf_core);
-            DSBL_DECODER_STATUS_RW();
+            
             return -1;
         } else {
             decoder_status.subscribed_channels[idx].last_frame_timestamp = frame_ts;
@@ -379,7 +358,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 128,
                 "Unable to set Init Vector: Channel %u: Ignoring frame...\n", channel_id);
             print_error(output_buf_core);
-            DSBL_DECODER_STATUS_RW();
+            
             return -1;
         }
         
@@ -388,13 +367,11 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         ret = decrypt_frame_data(frame_decryptor, new_frame -> data, decrypted_frame.data,  MAX_DECR_FRAME_SIZE);
         if(ret != 0) {
             print_error("AES Frame decrypt failed! - Data");
-            DSBL_DECODER_STATUS_RW();
             return -1;
         }
         ret = decrypt_frame_data(frame_decryptor, new_frame -> hash, decrypted_frame.hash,  FRAME_HASH_SIZE);
         if(ret != 0) {
             print_error("AES Frame decrypt failed! - Hash");
-            DSBL_DECODER_STATUS_RW();
             return -1;
         }
 
@@ -415,7 +392,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
                 channel_id
             );
             print_error(output_buf_core);
-            DSBL_DECODER_STATUS_RW();
+            
             return -1;
         }
         
@@ -424,17 +401,17 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
         if (pad_length >= MAX_DECR_FRAME_SIZE) {
             snprintf(output_buf_core, 128, "Invalid AES padding length! %d\n", pad_length);
             print_error(output_buf_core);
-            DSBL_DECODER_STATUS_RW();
+            
             return -1;
         }
 
         // Write the decrypted frame data to UART
         write_packet(DECODE_MSG, decrypted_frame.data, MAX_DECR_FRAME_SIZE - pad_length);
-        DSBL_DECODER_STATUS_RW();
+
         return 0;
     }
 
-    DSBL_DECODER_STATUS_RW();
+    print_error("Control Flow hack detected");
     return -1;
 }
 
@@ -443,14 +420,31 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
 void init()
 {
     int ret;
+    
+    // ---------------------------------------------------
+    // Initialize the uart peripheral to enable serial I/O
+    // ---------------------------------------------------
+
+    ret = uart_init();
+    if (ret < 0) {
+        STATUS_LED_ERROR();
+        // if uart fails to initialize, do not continue to execute
+        while (1);
+    }
+
+    // ---------------------------------------------------
+    // Initialize the device flash peripherals
+    // ---------------------------------------------------
 
     // Initialize the flash peripheral to enable access to persistent memory
     flash_simple_init();
 
-    ENBL_DECODER_STATUS_RW();
-
     // Read starting flash values into our flash status struct
     flash_simple_read(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
+
+    // ---------------------------------------------------
+    // Initialize the decoder and channel statuses
+    // ---------------------------------------------------
 
     if (decoder_status.first_boot != FLASH_FIRST_BOOT)
     {
@@ -470,13 +464,8 @@ void init()
         subscription[0].end_timestamp = DEFAULT_CHANNEL_TIMESTAMP;
         subscription[0].active = true;
 
-        ENBL_EMGNCY_CHL_KEY_RO();
-        ENBL_EMGNCY_CHL_IV_RO();
         memcpy(subscription[0].channel_key, emergency_channel_key, CHNL_KEY_LENGTH);
         memcpy(subscription[0].init_vector, emergency_channel_iv, INIT_VEC_LENGTH);
-        DSBL_EMGNCY_CHL_KEY_RO();
-        DSBL_EMGNCY_CHL_IV_RO();
-
         subscription[0].last_frame_timestamp = 0;
 
         // Write in data for all other channels
@@ -516,13 +505,11 @@ void init()
                         "Initialization failed! AES Context cannot be set: Channel %u\n",
                         decoder_status.subscribed_channels[i].id
                 );
-                DSBL_DECODER_STATUS_RW();
+
                 print_error(output_buf_core);
             }
         }
     }
-    
-    DSBL_DECODER_STATUS_RW();
 
     // Initialize the uart peripheral to enable serial I/O
     ret = uart_init();

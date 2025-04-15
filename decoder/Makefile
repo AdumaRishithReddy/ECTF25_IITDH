@@ -242,7 +242,7 @@ ifeq ($(DEBUG),1)
 # Optimizes for debugging as recommended
 # by GNU for code-edit-debug cycles
 # https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html#Optimize-Options
-MXC_OPTIMIZE_CFLAGS := -Og #TODO: Remove this debug flag
+# MXC_OPTIMIZE_CFLAGS := -Og #TODO: Remove this debug flag
 endif
 
 # Default level if not building for release or explicitly for debug
@@ -256,7 +256,7 @@ ifeq ($(CRYPTO_EXAMPLE), 1)
 PROJ_CFLAGS += -DMXC_ASSERT_ENABLE
 
 # eCTF Crypto Example - WolfSSL Flags
-PROJ_CFLAGS += -DREQUIRE_DEBUG_FUNC #TODO: Comment this out to remove debug functions from our C code
+# PROJ_CFLAGS += -DREQUIRE_DEBUG_FUNC #TODO: Comment this out to remove debug functions from our C code
 PROJ_CFLAGS += -DCRYPTO_EXAMPLE=1
 PROJ_CFLAGS += -DNO_WOLFSSL_DIR
 PROJ_CFLAGS += -DWOLFSSL_AES_DIRECT

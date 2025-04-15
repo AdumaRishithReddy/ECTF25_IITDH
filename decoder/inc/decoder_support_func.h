@@ -83,16 +83,4 @@ int decrypt_frame_data(Aes * frame_decryptor,
                         byte_t *decr_frame_data,
                         const size_t data_len);
 
-
-void enable_mpu_access_rw(unsigned int region_num,
-                        unsigned int base_register,
-                        unsigned int region_size);
-
-void enable_mpu_access_ro(unsigned int region_num,
-                        unsigned int base_register,
-                        unsigned int region_size);
-
-void disable_mpu_access(unsigned int region_num,
-                        unsigned int base_register,
-                        unsigned int region_size);
 #endif
