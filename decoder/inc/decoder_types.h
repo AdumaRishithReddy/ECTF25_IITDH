@@ -43,12 +43,12 @@
 #define MAX_FRAME_PKT_SIZE 109
 
 // Subscription specific constants
+#define MSTR_KEY_LENGTH 16
 #define CHNL_KEY_LENGTH 16
 #define INIT_VEC_LENGTH 16
 #define SUBS_HASH_SIZE 32
 #define MAX_SUBS_PKT_SIZE 96
 #define SUBS_PAD_SIZE 8
-
 
 /**********************************************************
  *********** COMMUNICATION PACKET DEFINITIONS *************
@@ -126,4 +126,5 @@ typedef struct
     uint32_t first_boot; // if set to FLASH_FIRST_BOOT, device has booted before.
     channel_status_t subscribed_channels[MAX_CHANNEL_COUNT];
 } flash_entry_t;
+
 #endif
