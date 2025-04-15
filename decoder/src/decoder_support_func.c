@@ -26,7 +26,7 @@ int is_subscribed(const channel_id_t channel, const flash_entry_t *decoder_statu
         return 1;
     }
     // Check if the decoder has has a subscription
-    for (int i = 0; i < MAX_CHANNEL_COUNT; i++) {
+    for (uint8_t i = 1; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status -> subscribed_channels[i].id == channel && decoder_status -> subscribed_channels[i].active) {
             return 1;
         }

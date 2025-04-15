@@ -19,12 +19,13 @@ import base64
 
 from loguru import logger
 
-master_key_type = "AES"
 
-# Debug function used to check keys
-# Prints keys as 4 byte integers
-# (only works if key size is multiple of 4)
 def print_as_int(label: str, data: bytes):
+    """
+    Debug function used to check keys
+    Prints keys as 4 byte integers
+    (only works if key size is multiple of 4)
+    """
     out_str = label
     for i in range(0, len(data) - 3, 4):
         part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)

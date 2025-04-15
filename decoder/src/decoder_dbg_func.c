@@ -1,3 +1,5 @@
+#ifdef REQUIRE_DEBUG_FUNC
+
 #include "decoder_dbg_func.h"
 #include "decoder_types.h"
 #include "host_messaging.h"
@@ -42,3 +44,5 @@ void print_hex_deb(const char *label, uint8_t *data, size_t len)
 
     print_debug(buffer); // Print the formatted hex output
 }
+
+#endif // REQUIRE_DEBUG_FUNC

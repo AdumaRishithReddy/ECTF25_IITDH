@@ -57,6 +57,9 @@
 #pragma pack(push, 1) // Tells the compiler not to pad the struct members
 // for more information on what struct padding does, see:
 // https://www.gnu.org/software/c-intro-and-ref/manual/html_node/Structure-Layout.html
+
+
+// Frame packet type (data is padded) - 109B
 typedef struct
 {
     channel_id_t channel;
@@ -66,6 +69,8 @@ typedef struct
     byte_t hash[FRAME_HASH_SIZE];
 } frame_packet_t;
 
+
+// Subscription update packet type (padded) - 96B
 typedef struct
 {
     decoder_id_t decoder_id;
@@ -75,9 +80,11 @@ typedef struct
     byte_t channel_key[CHNL_KEY_LENGTH];
     byte_t init_vector[INIT_VEC_LENGTH];
     byte_t hash[SUBS_HASH_SIZE];
-    byte_t aes_padding[SUBS_PAD_SIZE]; // Always ignore this packing
+    byte_t aes_padding[SUBS_PAD_SIZE]; // Always ignore this field
 } subscription_update_packet_t;
 
+
+// Channel info (used in list response) - 20B
 typedef struct
 {
     channel_id_t channel;
@@ -85,6 +92,8 @@ typedef struct
     timestamp_t end;
 } channel_info_t;
 
+
+// List response type
 typedef struct
 {
     uint32_t n_channels;
@@ -96,6 +105,8 @@ typedef struct
 /**********************************************************
  ******************** TYPE DEFINITIONS ********************
  **********************************************************/
+
+// Channel status type (used in decoder status)
 typedef struct
 {
     bool active;
@@ -108,6 +119,8 @@ typedef struct
     Aes frame_decryptor;
 } channel_status_t;
 
+
+// Flash entry type (used when reading and writing from flash)
 typedef struct
 {
     uint32_t first_boot; // if set to FLASH_FIRST_BOOT, device has booted before.

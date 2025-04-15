@@ -17,21 +17,19 @@ from pathlib import Path
 import struct
 import hashlib
 
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_v1_5
-
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
 from loguru import logger
 
-master_key_type = "AES"
 verify_before_write = False
 
-# Debug function used to check keys
-# Prints keys as 4 byte integers
-# (only works if key size is multiple of 4)
 def print_as_int(label: str, data: bytes):
+    """
+    Debug function used to check keys
+    Prints keys as 4 byte integers
+    (only works if key size is multiple of 4)
+    """
     out_str = label
     for i in range(0, len(data) - 3, 4):
         part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
@@ -58,12 +56,7 @@ def load_keys(secrets, device_id, channel_str):
     if random_16_bytes is None:
         raise ValueError("No Random 16 bytes found")
 
-    if master_key_type == "RSA":
-        raise NotImplementedError()
-    elif master_key_type == "AES":
-        random_16_bytes = bytes.fromhex(random_16_bytes)
-    else:
-        raise ValueError(f"Master Key type {master_key_type} undefined")
+    random_16_bytes = bytes.fromhex(random_16_bytes)
 
     # Load channel key
     channel_key_hex_str = channel_details[channel_str]["channel_key"]
@@ -75,12 +68,11 @@ def load_keys(secrets, device_id, channel_str):
     if iv_hex_str is None:
         raise ValueError("No IV found for channel")
 
-    # Create the master key for this device
-    # mk_cipher = AES.new(random_16_bytes, AES.MODE_ECB)
-    # decoder_id_bytes = device_id.to_bytes(4) * 4
-    # master_key = mk_cipher.encrypt(decoder_id_bytes)
-    
-    master_key = hashlib.pbkdf2_hmac('sha256',random_16_bytes,device_id.to_bytes(4,'big'),1000,dklen=16)
+    master_key = hashlib.pbkdf2_hmac('sha256',
+                                     random_16_bytes,
+                                     device_id.to_bytes(4, byteorder = 'big'),
+                                     1000,
+                                     dklen = 16)
 
 
     return master_key, channel_key_hex_str, iv_hex_str
@@ -118,14 +110,9 @@ def encrypt_subscription_struct(master_key_encoder, packed_data):
     """
 
     # Create a cipher for encryption
-    if master_key_type == "RSA":
-        cipher = PKCS1_v1_5.new(master_key_encoder)
-        return cipher.encrypt(packed_data)
-
-    if master_key_type == "AES":
-        cipher = AES.new(master_key_encoder, AES.MODE_ECB)
-        packed_padded = pad(packed_data, AES.block_size)
-        return cipher.encrypt(packed_padded)
+    cipher = AES.new(master_key_encoder, AES.MODE_ECB)
+    packed_padded = pad(packed_data, AES.block_size)
+    return cipher.encrypt(packed_padded)
 
 def verify_encrypted_sub(master_key_decoder, encrypted_data, expected_values):
     """Verify the decrypted subscription data against expected values.
@@ -137,19 +124,9 @@ def verify_encrypted_sub(master_key_decoder, encrypted_data, expected_values):
     """
 
     # Decrypt based on algorithm used
-    if master_key_type == "RSA":
-        master_key_decoder = RSA.import_key(master_key_decoder)
-        cipher_decoder = PKCS1_v1_5.new(master_key_decoder)
-        sentinel = b'Error'
-        decrypted_data = cipher_decoder.decrypt(encrypted_data, sentinel)
-
-        if decrypted_data == sentinel:
-            raise Exception("Padding Error in RSA")
-
-    elif master_key_type == "AES":
-        cipher_decoder = AES.new(master_key_decoder, AES.MODE_ECB)
-        decrypted_data = cipher_decoder.decrypt(encrypted_data)
-        decrypted_data = unpad(decrypted_data, AES.block_size)
+    cipher_decoder = AES.new(master_key_decoder, AES.MODE_ECB)
+    decrypted_data = cipher_decoder.decrypt(encrypted_data)
+    decrypted_data = unpad(decrypted_data, AES.block_size)
 
     unpacked_data = struct.unpack(f"<IQQI16s16s32s", decrypted_data)
 

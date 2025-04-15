@@ -6,7 +6,7 @@
 
 #include "decoder_types.h"
 
-
+#ifdef REQUIRE_DEBUG_FUNC
 
 /**
  * @brief Interprets a byte buffer as an array of 32-bit integers and prints them.
@@ -30,4 +30,5 @@ void print_as_int(const char* label, const size_t label_size, const byte_t *inp_
  */
 void print_hex_deb(const char *label, uint8_t *data, size_t len);
 
-#endif
+#endif // REQUIRE_DEBUG_FUNC
+#endif // DECODER_DBG_FUNC_H

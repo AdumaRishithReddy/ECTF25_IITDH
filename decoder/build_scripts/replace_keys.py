@@ -4,13 +4,12 @@ from Crypto.PublicKey import RSA, ECC
 from Crypto.Cipher import AES
 import hashlib
 
-master_key_type = "AES"
-signature_type = "EdDSA"
-
-# Debug function used to check keys
-# Prints keys as 4 byte integers
-# (only works if key size is multiple of 4)
 def print_as_int(label: str, data: bytes):
+    """
+    Debug function used to check keys
+    Prints keys as 4 byte integers
+    (only works if key size is multiple of 4)
+    """
     out_str = label
     for i in range(0, len(data) - 3, 4):
         part_int = int.from_bytes(data[i:i+4],  byteorder='little', signed=True)
@@ -59,45 +58,24 @@ if __name__ == "__main__":
     # ----------------------------------
     # Master Key placeholder replacement
     # ----------------------------------
-    if master_key_type == "RSA":
-        raise NotImplementedError()
 
-        # rsa_private_key_pem_str = secrets["decoder_details"][decoder_id]["master_key_decoder"]
-        # private_key = RSA.import_key(rsa_private_key_pem_str)
-        # rsa_key_der = private_key.export_key(format='DER')
-        #
-        # update_c_file(sys.argv[1], rsa_key_der, "/*$LEN_RSA_PRIV_KEY$*/", "/*$RSA_PRIV_KEY$*/")
-        #
-        # # To prevent compiler time error
-        # update_c_file(sys.argv[1], b'', "/*$LEN_AES_KEY$*/", "/*$PLACEHOLDER$*/")
+    # Load the random 16 bytes used to create master key
+    random_16_bytes = secrets["decoder_details"]["random_16_bytes"]
+    if random_16_bytes is None:
+        raise ValueError("No Random 16 bytes found")
 
-    elif master_key_type == "AES":
-        # Load the random 16 bytes used to create master key
-        random_16_bytes = secrets["decoder_details"]["random_16_bytes"]
-        if random_16_bytes is None:
-            raise ValueError("No Random 16 bytes found")
-        random_16_bytes = bytes.fromhex(random_16_bytes)
+    random_16_bytes = bytes.fromhex(random_16_bytes)
 
-        # Create the master key for this device
-        # mk_cipher = AES.new(random_16_bytes, AES.MODE_ECB)
-        # decoder_id_bytes = decoder_id.to_bytes(4) * 4
-        # aes_key = mk_cipher.encrypt(decoder_id_bytes)
-        aes_key = hashlib.pbkdf2_hmac('sha256',random_16_bytes,decoder_id.to_bytes(4,'big'),1000,dklen=16)
+    # Create the master key for this device
+    aes_key = hashlib.pbkdf2_hmac('sha256',random_16_bytes,decoder_id.to_bytes(4,'big'),1000,dklen=16)
 
+    # Update the C file
+    update_c_file(sys.argv[1], aes_key, "/*$LEN_AES_KEY$*/", "/*$AES_KEY$*/")
 
-        update_c_file(sys.argv[1], aes_key, "/*$LEN_AES_KEY$*/", "/*$AES_KEY$*/")
-
-        # To prevent compile time error
-        update_c_file(sys.argv[1], b'', "/*$LEN_RSA_PRIV_KEY$*/", "/*$PLACEHOLDER$*/")
-
-    else:
-        ValueError(f"Master Key type {master_key_type} undefined")
 
     # ----------------------------------
     # Emergency Channel Key replacement
     # ----------------------------------
-    # const byte_t emergency_channel_key[CHNL_KEY_LENGTH] /*$EMERGENCY_CHANNEL_KEY$*/
-    # const byte_t emergency_channel_iv[INIT_VEC_LENGTH] /*$EMERGENCY_CHANNEL_IV$*/
 
     channel_key_hex_str = secrets["channel_details"]["0"]["channel_key"]
     channel_key_bytes = bytes.fromhex(channel_key_hex_str)

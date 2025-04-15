@@ -91,10 +91,6 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
     hash(&decr_update_pkt, 
             MAX_SUBS_PKT_SIZE - SUBS_PAD_SIZE - SUBS_HASH_SIZE, 
             computed_hash);
-
-
-    print_as_int("COMPUTED__HASH: ", 16, computed_hash, 8);
-    print_as_int("DEC_PACKT_HASH: ", 16, decr_update_pkt.hash, 8);
     
     // Verify integrity of the update packet
     ret = strncmp(decr_update_pkt.hash, computed_hash, SUBS_HASH_SIZE);
@@ -126,7 +122,7 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
 
     // Find the first empty slot or slot with existing subscription in the subscription array
     // Fill it with updated subscription
-    uint8_t i = 0;
+    uint8_t i = 1;
 
     for (i = 1; i < MAX_CHANNEL_COUNT; i++) {
         if (decoder_status.subscribed_channels[i].id == decr_update_pkt.channel ||
@@ -167,7 +163,7 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
         }
     }
 
-    // If we do not have any room for more subscriptions
+    // If we do not have any room for more subscriptions - throw an error
     if (i == MAX_CHANNEL_COUNT) {
         STATUS_LED_RED();
         print_error("Failed to update subscription - max subscriptions installed\n");
@@ -196,7 +192,7 @@ int erase_subscription(channel_id_t channel_id) {
         return -1;
     }
 
-    // Erase channel if found (Do not erase ID)
+    // Erase channel data if found (Do not erase ID)
     for(uint8_t idx = 0; idx < MAX_CHANNEL_COUNT; idx++) {
 
         // Find the entry with the channel ID which is active
@@ -228,6 +224,10 @@ int erase_subscription(channel_id_t channel_id) {
 
 int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
 
+    // -------------------------------------------------------------
+    // Checks for ensuring no pesky frames are decoded - Packet size
+    // -------------------------------------------------------------
+
     if(pkt_len != MAX_FRAME_PKT_SIZE) {
         STATUS_LED_RED();
         snprintf(output_buf_core,
@@ -257,9 +257,9 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
 
     for(int idx = 0; idx < MAX_CHANNEL_COUNT; idx++) {
 
-        // ---------------------------------------------------
-        // Checks for ensuring no pesky frames are decoded
-        // ---------------------------------------------------
+        // ----------------------------------------------------
+        // More Checks for ensuring no pesky frames are decoded
+        // ----------------------------------------------------
 
         // Go ahead only if the channel id is found in our subscription
         if(decoder_status.subscribed_channels[idx].id != channel_id) {
@@ -334,7 +334,7 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             return -1;
         }
         
-        // Decrypt the frame (and also the hash, not visible here)
+        // Decrypt the frame and the hash (CTR works while split)
         frame_packet_t decrypted_frame;
         ret = decrypt_frame_data(frame_decryptor, new_frame -> data, decrypted_frame.data,  MAX_DECR_FRAME_SIZE);
         if(ret != 0) {
@@ -368,7 +368,6 @@ int decode(const pkt_len_t pkt_len, const frame_packet_t *new_frame) {
             return -1;
         }
         
-
         // Calculate padding
         uint8_t pad_length = new_frame -> pad_length;
         if (pad_length >= MAX_DECR_FRAME_SIZE) {
@@ -440,6 +439,7 @@ void init()
         flash_simple_write(FLASH_STATUS_ADDR, &decoder_status, sizeof(flash_entry_t));
     }
 
+    // Initialize all AES contexts every time the decoder boots up
     for (int i = 0; i < MAX_CHANNEL_COUNT; i++){
         if(decoder_status.subscribed_channels[i].active) {
             wc_AesInit(&(decoder_status.subscribed_channels[i].frame_decryptor), 

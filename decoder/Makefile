@@ -256,6 +256,7 @@ ifeq ($(CRYPTO_EXAMPLE), 1)
 PROJ_CFLAGS += -DMXC_ASSERT_ENABLE
 
 # eCTF Crypto Example - WolfSSL Flags
+PROJ_CFLAGS += -DREQUIRE_DEBUG_FUNC #TODO: Comment this out to remove debug functions from our C code
 PROJ_CFLAGS += -DCRYPTO_EXAMPLE=1
 PROJ_CFLAGS += -DNO_WOLFSSL_DIR
 PROJ_CFLAGS += -DWOLFSSL_AES_DIRECT

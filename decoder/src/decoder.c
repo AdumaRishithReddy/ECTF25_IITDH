@@ -37,6 +37,7 @@
 
 int main(void)
 {
+    // Initialize wolfCrypt
     wolfCrypt_Init();
 
     char output_buf[128] = {0};

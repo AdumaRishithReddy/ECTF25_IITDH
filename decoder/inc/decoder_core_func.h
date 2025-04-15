@@ -29,18 +29,10 @@ int update_subscription(const pkt_len_t pkt_len, const subscription_update_packe
  *
  *  @param channel_id The channel id whose data to erase
  *
+ *  @note This function MUST NOT be called on a subscription expiry.
+ *        It is only used when a subscription update/init fails.
  */
 int erase_subscription(channel_id_t channel_id);
-
-
-/** @brief Processes a packet containing frame data of emergency channel.
- *
- *  @param pkt_len A pointer to the incoming packet.
- *  @param new_frame A pointer to the incoming packet.
- *
- *  @return 0 if successful. Negative if error.
- */
-int decode_emergency_channel(const pkt_len_t pkt_len, const frame_packet_t *new_frame);
 
 
 /** @brief Processes a packet containing frame data.
